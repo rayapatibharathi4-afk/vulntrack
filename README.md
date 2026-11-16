@@ -1,10 +1,12 @@
 # VulnTrack
 
+[![CI](https://github.com/rayapatibharathi4-afk/vulntrack/actions/workflows/ci.yml/badge.svg)](https://github.com/rayapatibharathi4-afk/vulntrack/actions/workflows/ci.yml)
+
 > Turns CI vulnerability scan reports into tracked, deadline-driven findings.
 
 VulnTrack is a backend service that ingests dependency vulnerability scan reports from CI pipelines, enriches each CVE with data from the NVD API, tracks every finding against a severity-based SLA, and exposes REST APIs for listing, assigning and closing findings. Scans are processed asynchronously through Kafka, so a slow NVD API or a large report never blocks the CI pipeline.
 
-**Status:** work in progress. Milestones 0–1 are done (data model, Applications API, Findings API, error handling, tests). Scan ingestion, NVD enrichment, Kafka, security and CI are next. See [Roadmap](#roadmap).
+**Status:** work in progress. Milestones 0–2 are done (data model, scan ingestion, Findings API, error handling, 20 tests, CI). NVD enrichment, Kafka and security are designed and next. See [Roadmap](#roadmap)..
 
 ---
 
@@ -96,6 +98,8 @@ docker exec -i vulntrack-postgres psql -U vulntrack -d vulntrack < scripts/dev-s
 | `GET` | `/api/applications` | List applications (paged, sorted by name) |
 | `GET` | `/api/findings` | List findings with optional filters (paged, most urgent first) |
 | `GET` | `/actuator/health` | Health, including database, liveness and readiness |
+| `POST` | `/api/scans?application={name}` | Submit an OWASP Dependency-Check JSON report. `201` + summary (new, already tracked, fixed) |
+| `GET` | `/api/scans/{id}` | Scan status and timestamps |
 
 **Findings filters** (all optional, combinable):
 
@@ -162,11 +166,11 @@ scripts/                          Local development helpers (seed data)
 
 - [x] **M0 – Setup:** Spring Boot + PostgreSQL in Docker, health check
 - [x] **M1 – Data model + CRUD:** Flyway schema, entities, Applications and Findings APIs, error handling, tests
-- [ ] **M2 – Scan ingestion:** `POST /api/scans` for OWASP Dependency-Check reports, upserts, auto-FIXED
+- [x] **M2 – Scan ingestion:** `POST /api/scans` for OWASP Dependency-Check reports, package-level upserts, auto-FIXED
 - [ ] **M3 – NVD enrichment:** NVD API client with timeout, retry, circuit breaker, fallback and cache
 - [ ] **M4 – Async processing:** Kafka, `202 Accepted`, scan status endpoint, dead-letter topic
 - [ ] **M5 – Security + observability:** JWT roles, correlation IDs, Prometheus metrics, Testcontainers
-- [ ] **M6 – Ship it:** multi-stage Dockerfile, GitHub Actions with Dependency-Check on this repo
+- [ ] **M6 – Ship it:** ~~GitHub Actions build + tests~~ ✅ done · multi-stage Dockerfile · Dependency-Check on this repo
 
 ## Author
 
