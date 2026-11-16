@@ -52,12 +52,13 @@ public class Scan {
         // required by JPA
     }
 
-    public Scan(Application application, ScanSource source, String rawReport) {
-        this.application = application;
-        this.source = source;
-        this.rawReport = rawReport;
-        this.status = ScanStatus.RECEIVED;
-    }
+    public Scan(Application application, ScanSource source, String rawReport, Instant submittedAt) {
+    this.application = application;
+    this.source = source;
+    this.rawReport = rawReport;
+    this.submittedAt = submittedAt;
+    this.status = ScanStatus.RECEIVED;
+}
 
     @PrePersist
     @SuppressWarnings("unused") // called by Hibernate via reflection

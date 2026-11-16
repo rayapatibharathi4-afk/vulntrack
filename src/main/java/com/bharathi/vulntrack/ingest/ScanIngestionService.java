@@ -26,6 +26,7 @@ import com.bharathi.vulntrack.repository.FindingRepository;
 import com.bharathi.vulntrack.repository.ScanRepository;
 import com.bharathi.vulntrack.service.NotFoundException;
 import com.bharathi.vulntrack.service.SlaCalculator;
+import com.bharathi.vulntrack.web.dto.ScanResponse;
 
 @Service
 public class ScanIngestionService {
@@ -65,7 +66,7 @@ public class ScanIngestionService {
         List<ParsedFinding> parsed = parser.parse(rawReport);
         Instant now = clock.instant();
 
-        Scan scan = scans.save(new Scan(app, ScanSource.OWASP, rawReport));
+                        Scan scan = scans.save(new Scan(app, ScanSource.OWASP, rawReport, now));
         scan.markProcessing();
 
         Set<Long> seenFindingIds = new HashSet<>();
@@ -99,12 +100,19 @@ public class ScanIngestionService {
             }
         }
 
-        scan.markCompleted(now);
+        scan.markCompleted(clock.instant());
         ScanResult result = new ScanResult(scan.getId(), app.getName(),
                 parsed.size(), created, parsed.size() - created, fixed);
         log.info("Scan {} for {}: {} in report, {} new, {} fixed",
                 scan.getId(), app.getName(), parsed.size(), created, fixed);
         return result;
+    }
+
+    @Transactional(readOnly = true)
+    public ScanResponse getScan(Long id) {
+        return scans.findById(id)
+                .map(ScanResponse::from)
+                .orElseThrow(() -> new NotFoundException("Scan " + id + " not found"));
     }
 
     private Dependency upsertDependency(Application app, ParsedFinding pf) {

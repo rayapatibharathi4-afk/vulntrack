@@ -18,7 +18,9 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.context.request.WebRequest;
 import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler;
 
+import com.bharathi.vulntrack.ingest.InvalidReportException;
 import com.bharathi.vulntrack.service.ConflictException;
+import com.bharathi.vulntrack.service.NotFoundException;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
@@ -41,6 +43,18 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         problem.setDetail("One or more fields are invalid");
         problem.setProperty("errors", errors);
         return handleExceptionInternal(ex, problem, headers, status, request);
+    }
+
+    /** 400: the body isn't a usable Dependency-Check report. */
+    @ExceptionHandler(InvalidReportException.class)
+    public ProblemDetail handleInvalidReport(InvalidReportException ex) {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
+    }
+
+    /** 404: the application or scan doesn't exist. */
+    @ExceptionHandler(NotFoundException.class)
+    public ProblemDetail handleNotFound(NotFoundException ex) {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, ex.getMessage());
     }
 
     /** 409: our own "already exists" check. */
