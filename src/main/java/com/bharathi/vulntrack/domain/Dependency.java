@@ -45,6 +45,11 @@ public class Dependency {
         this.version = version;
     }
 
+    /** The latest scan reported a different version of this package. */
+    public void updateVersion(String newVersion) {
+        this.version = newVersion;
+    }
+
     public Long getId() { return id; }
     public Application getApplication() { return application; }
     public Ecosystem getEcosystem() { return ecosystem; }

@@ -9,6 +9,6 @@ import com.bharathi.vulntrack.domain.Ecosystem;
 
 public interface DependencyRepository extends JpaRepository<Dependency, Long> {
 
-    Optional<Dependency> findByApplicationIdAndEcosystemAndNameAndVersion(
-            Long applicationId, Ecosystem ecosystem, String name, String version);
+    Optional<Dependency> findByApplicationIdAndEcosystemAndName(
+        Long applicationId, Ecosystem ecosystem, String name);
 }

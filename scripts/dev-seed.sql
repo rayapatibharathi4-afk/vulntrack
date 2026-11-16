@@ -19,10 +19,10 @@ JOIN (VALUES
 ) AS v(app, name, version) ON v.app = a.name
 ON CONFLICT ON CONSTRAINT uq_dependency DO NOTHING;
 
-INSERT INTO finding (dependency_id, cve_id, status, first_seen_at, last_seen_at, sla_due_at, fixed_at, assignee)
+INSERT INTO finding (dependency_id, cve_id, status, first_seen_at, last_seen_at, sla_due_at, fixed_at, assignee, first_seen_version)
 SELECT d.id, v.cve_id, v.status,
        now() - v.first_seen_ago, now() - interval '1 day',
-       now() - v.first_seen_ago + v.sla, v.fixed_at, v.assignee
+       now() - v.first_seen_ago + v.sla, v.fixed_at, v.assignee, d.version
 FROM dependency d
 JOIN (VALUES
   -- CRITICAL, seen 10 days ago, 7-day SLA: overdue

@@ -36,6 +36,9 @@ public class Finding {
 
     @Column(name = "first_seen_at", nullable = false)
     private Instant firstSeenAt;
+    
+    @Column(name = "first_seen_version", nullable = false, length = 100)
+    private String firstSeenVersion;
 
     @Column(name = "last_seen_at", nullable = false)
     private Instant lastSeenAt;
@@ -56,6 +59,7 @@ public class Finding {
     public Finding(Dependency dependency, Cve cve, Instant seenAt, Instant slaDueAt) {
         this.dependency = dependency;
         this.cve = cve;
+        this.firstSeenVersion = dependency.getVersion();
         this.status = FindingStatus.OPEN;
         this.firstSeenAt = seenAt;
         this.lastSeenAt = seenAt;
@@ -99,6 +103,7 @@ public class Finding {
     public Cve getCve() { return cve; }
     public FindingStatus getStatus() { return status; }
     public Instant getFirstSeenAt() { return firstSeenAt; }
+    public String getFirstSeenVersion() { return firstSeenVersion; }
     public Instant getLastSeenAt() { return lastSeenAt; }
     public Instant getSlaDueAt() { return slaDueAt; }
     public Instant getFixedAt() { return fixedAt; }
