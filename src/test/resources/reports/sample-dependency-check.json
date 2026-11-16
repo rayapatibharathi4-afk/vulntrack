@@ -1,0 +1,80 @@
+{
+  "reportSchema": "1.1",
+  "scanInfo": { "engineVersion": "12.1.0" },
+  "projectInfo": {
+    "name": "payments-service",
+    "reportDate": "2026-11-16T15:00:00Z"
+  },
+  "dependencies": [
+    {
+      "isVirtual": false,
+      "fileName": "log4j-core-2.14.1.jar",
+      "filePath": "/home/runner/.m2/repository/org/apache/logging/log4j/log4j-core/2.14.1/log4j-core-2.14.1.jar",
+      "packages": [
+        { "id": "pkg:maven/org.apache.logging.log4j/log4j-core@2.14.1", "confidence": "HIGH" }
+      ],
+      "vulnerabilities": [
+        {
+          "source": "NVD",
+          "name": "CVE-2021-44228",
+          "severity": "CRITICAL",
+          "cvssv3": { "baseScore": 10.0, "attackVector": "NETWORK", "baseSeverity": "CRITICAL" },
+          "description": "Log4Shell: remote code execution through JNDI lookups in log messages."
+        },
+        {
+          "source": "NVD",
+          "name": "CVE-2021-45046",
+          "severity": "CRITICAL",
+          "cvssv3": { "baseScore": 9.0, "attackVector": "NETWORK", "baseSeverity": "CRITICAL" },
+          "description": "Incomplete fix for CVE-2021-44228 in certain non-default configurations."
+        },
+        {
+          "source": "OSSINDEX",
+          "name": "CVE-2021-44228",
+          "severity": "CRITICAL",
+          "cvssv3": { "baseScore": 10.0, "attackVector": "NETWORK", "baseSeverity": "CRITICAL" },
+          "description": "Same CVE reported by a second data source."
+        }
+      ]
+    },
+    {
+      "isVirtual": false,
+      "fileName": "spring-beans-5.3.17.jar",
+      "packages": [
+        { "id": "pkg:maven/org.springframework/spring-beans@5.3.17", "confidence": "HIGH" }
+      ],
+      "vulnerabilities": [
+        {
+          "source": "NVD",
+          "name": "CVE-2022-22965",
+          "severity": "CRITICAL",
+          "cvssv3": { "baseScore": 9.8, "attackVector": "NETWORK", "baseSeverity": "CRITICAL" },
+          "description": "Spring4Shell: remote code execution via data binding on JDK 9+."
+        }
+      ]
+    },
+    {
+      "isVirtual": false,
+      "fileName": "jackson-databind-2.13.1.jar",
+      "packages": [
+        { "id": "pkg:maven/com.fasterxml.jackson.core/jackson-databind@2.13.1", "confidence": "HIGH" }
+      ],
+      "vulnerabilities": [
+        {
+          "source": "NVD",
+          "name": "CVE-2020-36518",
+          "severity": "HIGH",
+          "cvssv3": { "baseScore": 7.5, "attackVector": "NETWORK", "baseSeverity": "HIGH" },
+          "description": "Denial of service via deeply nested JSON."
+        }
+      ]
+    },
+    {
+      "isVirtual": false,
+      "fileName": "commons-lang3-3.12.0.jar",
+      "packages": [
+        { "id": "pkg:maven/org.apache.commons/commons-lang3@3.12.0", "confidence": "HIGH" }
+      ]
+    }
+  ]
+}
