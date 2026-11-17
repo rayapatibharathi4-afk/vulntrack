@@ -21,7 +21,7 @@ import com.bharathi.vulntrack.repository.ApplicationRepository;
 import com.bharathi.vulntrack.repository.FindingRepository;
 import com.bharathi.vulntrack.service.NotFoundException;
 
-@SpringBootTest
+@SpringBootTest(properties = "vulntrack.enrichment.enabled=false")
 @Transactional
 class ScanIngestionServiceTest {
 

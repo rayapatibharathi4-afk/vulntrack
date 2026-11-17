@@ -9,6 +9,7 @@ public record NvdProperties(
         String baseUrl,
         String apiKey,
         Duration connectTimeout,
-        Duration readTimeout
+        Duration readTimeout,
+        Duration requestInterval
 ) {
 }

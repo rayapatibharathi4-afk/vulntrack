@@ -45,6 +45,30 @@ public class Cve {
         this.description = description;
     }
 
+    /**
+     * Apply authoritative details from NVD. If NVD has not scored the CVE yet
+     * (new CVEs are often "awaiting analysis"), keep the scanner's severity and score.
+     */
+    public void enrich(Severity nvdSeverity, BigDecimal nvdScore, String nvdDescription,
+                       Instant nvdPublishedAt, Instant fetchedAt) {
+        if (nvdScore != null) {
+            this.cvssScore = nvdScore;
+            this.severity = nvdSeverity;
+        }
+        if (nvdDescription != null) {
+            this.description = nvdDescription;
+        }
+        if (nvdPublishedAt != null) {
+            this.publishedAt = nvdPublishedAt;
+        }
+        this.fetchedAt = fetchedAt;
+    }
+
+    /** NVD has no record of this CVE: remember we checked, keep the scanner's data. */
+    public void markChecked(Instant fetchedAt) {
+        this.fetchedAt = fetchedAt;
+    }
+
     public String getId() { return id; }
     public BigDecimal getCvssScore() { return cvssScore; }
     public Severity getSeverity() { return severity; }
