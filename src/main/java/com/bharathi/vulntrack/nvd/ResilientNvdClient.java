@@ -51,7 +51,7 @@ public class ResilientNvdClient {
         } catch (CallNotPermittedException e) {
             throw new NvdUnavailableException("NVD circuit breaker is open", e);
         } catch (RestClientException e) {
-            throw new NvdUnavailableException("NVD call failed for " + cveId, e);
+            throw new NvdUnavailableException("NVD call failed for " + cveId + ": " + e.getMessage(), e);
         }
     }
 
