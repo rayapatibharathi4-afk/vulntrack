@@ -4,7 +4,6 @@ import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 
@@ -63,7 +62,7 @@ public class DependencyCheckReportParser {
                 String key = pkg.ecosystem() + "|" + pkg.name() + "|" + vuln.name();
                 unique.putIfAbsent(key, new ParsedFinding(
                         pkg.ecosystem(), pkg.name(), pkg.version(), vuln.name(),
-                        toSeverity(vuln.severity(), score), score, vuln.description()));
+                        Severity.from(vuln.severity(), score), score, vuln.description()));
             }
         }
         return new ArrayList<>(unique.values());
@@ -82,22 +81,5 @@ public class DependencyCheckReportParser {
         return Optional.empty();
     }
 
-    static Severity toSeverity(String reported, BigDecimal score) {
-        if (reported != null) {
-            switch (reported.trim().toUpperCase(Locale.ROOT)) {
-                case "CRITICAL" -> { return Severity.CRITICAL; }
-                case "HIGH" -> { return Severity.HIGH; }
-                case "MEDIUM", "MODERATE" -> { return Severity.MEDIUM; }
-                case "LOW" -> { return Severity.LOW; }
-                default -> { /* fall back to the score */ }
-            }
-        }
-        if (score == null) {
-            return Severity.MEDIUM;
-        }
-        if (score.compareTo(new BigDecimal("9.0")) >= 0) return Severity.CRITICAL;
-        if (score.compareTo(new BigDecimal("7.0")) >= 0) return Severity.HIGH;
-        if (score.compareTo(new BigDecimal("4.0")) >= 0) return Severity.MEDIUM;
-        return Severity.LOW;
-    }
+    
 }

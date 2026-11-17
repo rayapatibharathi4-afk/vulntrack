@@ -1,16 +1,18 @@
 package com.bharathi.vulntrack.ingest;
 
-import static java.nio.charset.StandardCharsets.UTF_8;
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-
-import com.bharathi.vulntrack.domain.Ecosystem;
-import com.bharathi.vulntrack.domain.Severity;
 import java.io.IOException;
 import java.io.InputStream;
 import java.math.BigDecimal;
+import static java.nio.charset.StandardCharsets.UTF_8;
 import java.util.List;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import org.junit.jupiter.api.Test;
+
+import com.bharathi.vulntrack.domain.Ecosystem;
+import com.bharathi.vulntrack.domain.Severity;
+
 import tools.jackson.databind.json.JsonMapper;
 
 class DependencyCheckReportParserTest {
@@ -70,9 +72,9 @@ class DependencyCheckReportParserTest {
 
     @Test
     void mapsModerateAndMissingSeverities() {
-        assertThat(DependencyCheckReportParser.toSeverity("MODERATE", null)).isEqualTo(Severity.MEDIUM);
-        assertThat(DependencyCheckReportParser.toSeverity(null, new BigDecimal("9.8"))).isEqualTo(Severity.CRITICAL);
-        assertThat(DependencyCheckReportParser.toSeverity(null, new BigDecimal("6.5"))).isEqualTo(Severity.MEDIUM);
-        assertThat(DependencyCheckReportParser.toSeverity(null, null)).isEqualTo(Severity.MEDIUM);
+        assertThat(Severity.from("MODERATE", null)).isEqualTo(Severity.MEDIUM);
+        assertThat(Severity.from(null, new BigDecimal("9.8"))).isEqualTo(Severity.CRITICAL);
+        assertThat(Severity.from(null, new BigDecimal("6.5"))).isEqualTo(Severity.MEDIUM);
+        assertThat(Severity.from(null, null)).isEqualTo(Severity.MEDIUM);
     }
 }
