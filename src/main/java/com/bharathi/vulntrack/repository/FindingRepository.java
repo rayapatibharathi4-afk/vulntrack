@@ -1,5 +1,6 @@
 package com.bharathi.vulntrack.repository;
 
+import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -18,6 +19,9 @@ public interface FindingRepository extends JpaRepository<Finding, Long>, JpaSpec
 
     Optional<Finding> findByDependencyIdAndCveId(Long dependencyId, String cveId);
     List<Finding> findByDependencyApplicationIdAndStatusIn(Long applicationId, Collection<FindingStatus> statuses);
+
+    /** Accepted risks whose expiry is before the cut-off. Uses the status and risk columns, not the SLA. */
+    List<Finding> findByStatusAndRiskExpiresAtBefore(FindingStatus status, Instant cutoff);
 
     @Override
     @EntityGraph(attributePaths = {"dependency", "dependency.application", "cve"})

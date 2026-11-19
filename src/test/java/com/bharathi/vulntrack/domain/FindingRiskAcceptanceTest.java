@@ -66,6 +66,23 @@ class FindingRiskAcceptanceTest {
     }
 
     @Test
+    void theExpiryJobReopensAnExpiredAcceptanceAndLeavesAnActiveOneAlone() {
+        finding.acceptRisk("reason", "j.doe", ACCEPTED, EXPIRES);
+
+        assertThat(finding.reopenIfRiskExpired(EXPIRES.minusSeconds(1))).isFalse();
+        assertThat(finding.getStatus()).isEqualTo(FindingStatus.ACCEPTED_RISK);
+
+        assertThat(finding.reopenIfRiskExpired(EXPIRES.plusSeconds(1))).isTrue();
+        assertThat(finding.getStatus()).isEqualTo(FindingStatus.OPEN);
+    }
+
+    @Test
+    void reopeningDoesNothingToAFindingThatWasNeverAccepted() {
+        assertThat(finding.reopenIfRiskExpired(EXPIRES.plusSeconds(1))).isFalse();
+        assertThat(finding.getStatus()).isEqualTo(FindingStatus.OPEN);
+    }
+
+    @Test
     void aScanAfterExpiryReopensTheFindingAndClearsTheAcceptance() {
         finding.acceptRisk("reason", "j.doe", ACCEPTED, EXPIRES);
 

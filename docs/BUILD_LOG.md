@@ -40,6 +40,25 @@
 **Known gaps (for later steps)**
 - Duplicate-delivery test not written yet — Step 4.
 
+## Milestone 5 — Step 7: expiry job for accepted risks
+
+**What changed**
+- `Finding.reopenIfRiskExpired(now)`: the one place that reopens an expired acceptance (clears its details and sets `OPEN`).
+  `markSeen` (the scan path) now calls it, so both paths share the rule.
+- `FindingRepository.findByStatusAndRiskExpiresAtBefore(status, cutoff)`: the job's query.
+- `RiskExpiryJob` (service): hourly `@Scheduled` job (`vulntrack.risk-expiry.delay`, first run after `initial-delay`), reads expired
+  acceptances, and reopens them. Logs how many it reopened. Switch-off property: `vulntrack.risk-expiry.enabled`.
+- Every test context disables the job or delays its first run by an hour, so no background work runs during tests.
+
+**Decisions**
+- Hourly, not per-finding timers: one query per hour, simple to reason about, and a risk review deadline is measured in days.
+- Reopened findings are already past their SLA date, so they appear as overdue straight away.
+
+**Verification**
+- `.\mvnw.cmd clean verify`: exit 0, 67 tests green (+2 domain tests for reopening, +1 integration test: expired acceptances reopen,
+  active ones stay accepted; this test commits its own rows against a Postgres container).
+- Live check: **not run.** Old app still on port 8080.
+
 ## Extension of Milestone 4 — transactional outbox (closes the dual-write gap)
 
 **What changed**

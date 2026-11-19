@@ -125,7 +125,10 @@ Kafka consumer, packaged as a container, with API-key auth, metrics and a CI pip
   risks. Here the ingest key cannot accept, and the risk key cannot create scans.
 - **Why the database enforces the details:** a check constraint refuses an accepted finding with no reason, expiry, or
   acceptor, even if a bug skips the service.
-- **Trade-off:** the expiry only takes effect at the next scan. Nothing runs on the clock. A scheduled job would close that.
+- **Expiry on the clock:** an hourly job reopens expired acceptances, so a risk cannot quietly stay accepted after its date.
+  The scan path also reopens them, if a scan reports the problem first. The job is in `RiskExpiryJob`.
+- **Trade-off:** the job runs hourly, so an expired acceptance can look accepted for up to an hour. That is fine for a review
+  deadline measured in days.
 - **Likely question:** *Why does acceptance need an expiry at all?* A risk accepted forever is never reviewed. An expiry
   forces a periodic decision.
 
@@ -149,7 +152,7 @@ Kafka consumer, packaged as a container, with API-key auth, metrics and a CI pip
 ## Known gaps, stated plainly
 
 - One stuck outbox message delays the messages behind it until it is fixed (by design, to keep order).
-- An expired risk acceptance reopens only at the next scan, not on the clock.
+- An expired risk acceptance reopens within an hour (the job's schedule), not at the exact moment of expiry.
 - `acceptedBy` is written as given; it is not an authenticated identity.
 - No assigning or closing of findings through the API.
 - API keys are static: no rotation, no per-client identity, no audit log.

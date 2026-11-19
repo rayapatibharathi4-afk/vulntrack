@@ -85,11 +85,23 @@ public class Finding {
             // it came back: a regression
             this.status = FindingStatus.OPEN;
             this.fixedAt = null;
-        } else if (status == FindingStatus.ACCEPTED_RISK && isRiskAcceptanceExpired(seenAt)) {
+        } else {
             // the acceptance ran out and the problem is still there: it needs attention again
-            this.status = FindingStatus.OPEN;
-            clearRiskAcceptance();
+            reopenIfRiskExpired(seenAt);
         }
+    }
+
+    /**
+     * Turns an accepted risk back into an open finding once its expiry has passed. Returns true when it did.
+     * Called by the scan path (the problem is still reported) and by the expiry job (on the clock).
+     */
+    public boolean reopenIfRiskExpired(Instant now) {
+        if (status != FindingStatus.ACCEPTED_RISK || !isRiskAcceptanceExpired(now)) {
+            return false;
+        }
+        this.status = FindingStatus.OPEN;
+        clearRiskAcceptance();
+        return true;
     }
 
     /** The latest scan no longer contains this problem. */

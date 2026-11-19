@@ -31,7 +31,8 @@ import com.bharathi.vulntrack.web.dto.ScanResponse;
         "vulntrack.enrichment.enabled=false",
         "vulntrack.scan-consumer.enabled=true",
         "vulntrack.outbox.enabled=true",
-        "vulntrack.outbox.delay=500ms"
+        "vulntrack.outbox.delay=500ms",
+        "vulntrack.risk-expiry.enabled=false"
 })
 @Import({PostgresContainerConfig.class, KafkaContainerConfig.class})
 class OutboxDeliveryKafkaTest {
