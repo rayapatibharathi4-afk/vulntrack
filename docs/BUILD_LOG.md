@@ -40,6 +40,33 @@
 **Known gaps (for later steps)**
 - Duplicate-delivery test not written yet — Step 4.
 
+## Milestone 5 — Step 6: risk acceptance role
+
+**What changed**
+- `V3__risk_acceptance.sql`: adds `risk_reason`, `risk_accepted_by`, `risk_accepted_at`, `risk_expires_at`, and a check
+  constraint: an `ACCEPTED_RISK` finding must have all four. Existing rows: none accepted, so the constraint applies cleanly
+  (checked on the dev database before committing).
+- `Finding`: `acceptRisk(reason, acceptedBy, acceptedAt, expiresAt)` replaces the empty `acceptRisk()`. It allows only open or
+  in-progress findings, a non-blank reason and acceptor, and an expiry after the acceptance time. Violations throw
+  `IllegalStateException` or `IllegalArgumentException`; the service maps them to 409 and 400.
+- `markSeen`: an accepted finding whose expiry has passed, and which a scan still reports, goes back to `OPEN`, and its
+  acceptance details are cleared. Before expiry it stays accepted.
+- `POST /api/findings/{id}/accept-risk`: body `reason`, `acceptedBy`, `expiresAt`. Returns the finding.
+- Third key `VULNTRACK_RISK_API_KEY` grants `ROLE_RISK` only. The route rule for accept-risk is listed before the general
+  `POST /api/**` rule, because the first matching rule wins.
+- Compose and `application.properties` pass the new key through.
+
+**Decisions**
+- Separate key, not an admin role: the creator of scans and the accepter of risks should not be the same credential.
+- The expiry is enforced at the next scan, not by a timer. A scheduled job would be the next step.
+- `acceptedBy` is recorded as given. Without user accounts it cannot be verified; the README says so.
+
+**Verification**
+- `.\mvnw.cmd clean verify`: exit 0, 61 tests green (+11: six domain tests on the rules and expiry, five web tests on the keys
+  and validation).
+- Dev database: no `ACCEPTED_RISK` rows, so the new constraint applies without errors.
+- Live check: **not run.** Old app still on port 8080.
+
 ## Milestone 6 — Step 2: OWASP Dependency-Check in CI
 
 **What changed**

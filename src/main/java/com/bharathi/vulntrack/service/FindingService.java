@@ -13,6 +13,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.bharathi.vulntrack.domain.Finding;
 import com.bharathi.vulntrack.repository.FindingRepository;
+import com.bharathi.vulntrack.web.dto.AcceptRiskRequest;
 import static com.bharathi.vulntrack.repository.FindingSpecifications.belongsToApplication;
 import static com.bharathi.vulntrack.repository.FindingSpecifications.hasSeverity;
 import static com.bharathi.vulntrack.repository.FindingSpecifications.hasStatus;
@@ -50,5 +51,24 @@ public class FindingService {
 
         return findings.findAll(Specification.allOf(conditions), pageable)
                 .map(finding -> FindingResponse.from(finding, now));
+    }
+
+    /**
+     * Accepts the risk of one finding until the given time. The clock supplies the moment of
+     * acceptance, so the expiry rule is checked against the same "now" as the rest of the app.
+     */
+    @Transactional
+    public FindingResponse acceptRisk(Long id, AcceptRiskRequest request) {
+        Finding finding = findings.findById(id)
+                .orElseThrow(() -> new NotFoundException("Finding " + id + " not found"));
+        Instant now = clock.instant();
+        try {
+            finding.acceptRisk(request.reason(), request.acceptedBy(), now, request.expiresAt());
+        } catch (IllegalStateException e) {
+            throw new ConflictException(e.getMessage());
+        } catch (IllegalArgumentException e) {
+            throw new InvalidRequestException(e.getMessage());
+        }
+        return FindingResponse.from(finding, now);
     }
 }

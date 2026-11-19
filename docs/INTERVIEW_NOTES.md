@@ -95,6 +95,19 @@ Kafka consumer, packaged as a container, with API-key auth, metrics and a CI pip
 - **Likely question:** *Why 403 and not 401 for a read-only key trying to write?* 401 means the caller is not
   identified. This key is identified and simply not allowed, so 403 is the accurate answer.
 
+### Risk acceptance (closing out M5)
+
+- **What:** a security owner, with a separate key, accepts a finding's risk with a reason and an expiry date.
+  The status becomes `ACCEPTED_RISK`, and the acceptance is excluded from overdue. A scan that still reports the
+  finding after the expiry reopens it.
+- **Why a separate role:** separation of duties. The team that creates scans should not also be able to accept their
+  risks. Here the ingest key cannot accept, and the risk key cannot create scans.
+- **Why the database enforces the details:** a check constraint refuses an accepted finding with no reason, expiry, or
+  acceptor, even if a bug skips the service.
+- **Trade-off:** the expiry only takes effect at the next scan. Nothing runs on the clock. A scheduled job would close that.
+- **Likely question:** *Why does acceptance need an expiry at all?* A risk accepted forever is never reviewed. An expiry
+  forces a periodic decision.
+
 ## M6: shipping
 
 - **Container image:** two stages. A JDK stage builds the jar; a JRE stage runs only the jar, as a non-root user.
@@ -115,7 +128,8 @@ Kafka consumer, packaged as a container, with API-key auth, metrics and a CI pip
 ## Known gaps, stated plainly
 
 - No transactional outbox (dual write between the database and Kafka).
-- No risk-acceptance role yet, and no endpoint for it.
+- An expired risk acceptance reopens only at the next scan, not on the clock.
+- `acceptedBy` is written as given; it is not an authenticated identity.
 - No assigning or closing of findings through the API.
 - API keys are static: no rotation, no per-client identity, no audit log.
 - Dead-letter messages are replayed by hand.

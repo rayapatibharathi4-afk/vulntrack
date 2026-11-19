@@ -21,6 +21,7 @@ import tools.jackson.databind.ObjectMapper;
 /**
  * Who may do what:
  * <ul>
+ *   <li>POST /api/findings/{id}/accept-risk: RISK role (the risk key only)</li>
  *   <li>POST /api/**: INGEST role (the ingest key)</li>
  *   <li>GET /api/** and the metrics endpoints: VIEWER role (the read key, or the ingest key)</li>
  *   <li>health, info and the error page: open, so probes and error responses keep working</li>
@@ -35,6 +36,7 @@ public class SecurityConfig {
     public SecurityFilterChain securityFilterChain(HttpSecurity http,
                                                    @Value("${vulntrack.security.api-key:}") String ingestKey,
                                                    @Value("${vulntrack.security.read-api-key:}") String readKey,
+                                                   @Value("${vulntrack.security.risk-api-key:}") String riskKey,
                                                    ObjectMapper json) throws Exception {
         http
                 // Stateless API with no browser cookies, so CSRF protection does not apply
@@ -42,8 +44,10 @@ public class SecurityConfig {
                 .httpBasic(basic -> basic.disable())
                 .formLogin(form -> form.disable())
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-                .addFilterBefore(new ApiKeyAuthFilter(ingestKey, readKey), UsernamePasswordAuthenticationFilter.class)
+                .addFilterBefore(new ApiKeyAuthFilter(ingestKey, readKey, riskKey), UsernamePasswordAuthenticationFilter.class)
                 .authorizeHttpRequests(auth -> auth
+                        // Listed before the general POST rule: the first matching rule wins
+                        .requestMatchers(HttpMethod.POST, "/api/findings/*/accept-risk").hasRole("RISK")
                         .requestMatchers(HttpMethod.POST, "/api/**").hasRole("INGEST")
                         .requestMatchers(HttpMethod.GET, "/api/**").hasRole("VIEWER")
                         .requestMatchers("/actuator/health/**", "/actuator/info", "/error").permitAll()

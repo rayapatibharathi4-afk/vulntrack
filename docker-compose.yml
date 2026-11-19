@@ -57,6 +57,7 @@ services:
       # Empty means writes are refused (the app fails closed), so the stack still starts without it
       VULNTRACK_API_KEY: ${VULNTRACK_API_KEY:-}
       VULNTRACK_READ_API_KEY: ${VULNTRACK_READ_API_KEY:-}
+      VULNTRACK_RISK_API_KEY: ${VULNTRACK_RISK_API_KEY:-}
       NVD_API_KEY: ${NVD_API_KEY:-}
     ports:
       - "8080:8080"

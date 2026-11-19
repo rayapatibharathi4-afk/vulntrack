@@ -52,6 +52,18 @@ public class Finding {
     @Column(name = "assignee", length = 100)
     private String assignee;
 
+    @Column(name = "risk_reason", length = 500)
+    private String riskReason;
+
+    @Column(name = "risk_accepted_by", length = 100)
+    private String riskAcceptedBy;
+
+    @Column(name = "risk_accepted_at")
+    private Instant riskAcceptedAt;
+
+    @Column(name = "risk_expires_at")
+    private Instant riskExpiresAt;
+
     protected Finding() {
         // required by JPA
     }
@@ -73,6 +85,10 @@ public class Finding {
             // it came back: a regression
             this.status = FindingStatus.OPEN;
             this.fixedAt = null;
+        } else if (status == FindingStatus.ACCEPTED_RISK && isRiskAcceptanceExpired(seenAt)) {
+            // the acceptance ran out and the problem is still there: it needs attention again
+            this.status = FindingStatus.OPEN;
+            clearRiskAcceptance();
         }
     }
 
@@ -89,8 +105,41 @@ public class Finding {
         }
     }
 
-    public void acceptRisk() {
+    /**
+     * Records a decision to live with this problem until expiresAt. Only an open or in-progress
+     * finding can be accepted. Throws IllegalStateException or IllegalArgumentException when the
+     * rules are broken; the service turns those into HTTP responses.
+     */
+    public void acceptRisk(String reason, String acceptedBy, Instant acceptedAt, Instant expiresAt) {
+        if (status != FindingStatus.OPEN && status != FindingStatus.IN_PROGRESS) {
+            throw new IllegalStateException("Only an open finding can be accepted, this one is " + status);
+        }
+        if (reason == null || reason.isBlank()) {
+            throw new IllegalArgumentException("A reason is required to accept a risk");
+        }
+        if (acceptedBy == null || acceptedBy.isBlank()) {
+            throw new IllegalArgumentException("Name who accepts the risk");
+        }
+        if (!expiresAt.isAfter(acceptedAt)) {
+            throw new IllegalArgumentException("The acceptance must expire in the future");
+        }
         this.status = FindingStatus.ACCEPTED_RISK;
+        this.riskReason = reason;
+        this.riskAcceptedBy = acceptedBy;
+        this.riskAcceptedAt = acceptedAt;
+        this.riskExpiresAt = expiresAt;
+    }
+
+    /** True once an accepted risk has run out. Only meaningful for ACCEPTED_RISK findings. */
+    public boolean isRiskAcceptanceExpired(Instant now) {
+        return riskExpiresAt != null && !now.isBefore(riskExpiresAt);
+    }
+
+    private void clearRiskAcceptance() {
+        this.riskReason = null;
+        this.riskAcceptedBy = null;
+        this.riskAcceptedAt = null;
+        this.riskExpiresAt = null;
     }
 
     public boolean isOverdue(Instant now) {
@@ -108,4 +157,8 @@ public class Finding {
     public Instant getSlaDueAt() { return slaDueAt; }
     public Instant getFixedAt() { return fixedAt; }
     public String getAssignee() { return assignee; }
+    public String getRiskReason() { return riskReason; }
+    public String getRiskAcceptedBy() { return riskAcceptedBy; }
+    public Instant getRiskAcceptedAt() { return riskAcceptedAt; }
+    public Instant getRiskExpiresAt() { return riskExpiresAt; }
 }

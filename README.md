@@ -6,9 +6,9 @@
 
 VulnTrack is a backend service that ingests dependency vulnerability scan reports from CI pipelines, enriches each CVE with data from the NVD API, tracks every finding against a severity-based SLA, and exposes REST APIs for listing findings and checking scan status. Scans are processed asynchronously through Kafka, so a slow NVD API or a large report never blocks the CI pipeline.
 
-**Status:** Milestones 0–4 and 6 are complete. Milestone 5 (security and observability) is nearly done; one item is open: a role for risk acceptance. See [Roadmap](#roadmap).
+**Status:** Milestones 0–6 are complete, apart from the live checks noted in the build log. See [Roadmap](#roadmap).
 
-**Not built yet:** assigning and closing findings (the findings API is read-only), and risk acceptance.
+**Not built yet:** assigning findings and closing them by hand (fixes are detected by scans), and a job that reopens an expired risk acceptance without waiting for the next scan.
 
 ---
 
@@ -118,6 +118,7 @@ docker exec -i vulntrack-postgres psql -U vulntrack -d vulntrack < scripts/dev-s
 | `GET` | `/api/findings` | List findings with optional filters (paged, most urgent first). Any key |
 | `POST` | `/api/scans?application={name}` | Submit an OWASP Dependency-Check JSON report. `202 Accepted` + `Location` header, status `RECEIVED`. Processing is asynchronous. Ingest key |
 | `GET` | `/api/scans/{id}` | Scan status (`RECEIVED`, `PROCESSING`, `COMPLETED`, `FAILED`) and timestamps. Any key |
+| `POST` | `/api/findings/{id}/accept-risk` | Accept the risk of an open finding until a date. Body: `reason`, `acceptedBy`, `expiresAt`. `200` with the finding. `409` if the finding is not open. Risk key |
 | `GET` | `/actuator/health` | Health, including the database. Open |
 | `GET` | `/actuator/prometheus` | Metrics for Prometheus. Any key |
 
@@ -144,6 +145,7 @@ A correlation ID travels with each request. Send `X-Correlation-Id: <id>` to cho
 |---|---|
 | `VULNTRACK_API_KEY` | read and write (CI pipelines) |
 | `VULNTRACK_READ_API_KEY` | read only (dashboards, Prometheus scraping) |
+| `VULNTRACK_RISK_API_KEY` | accept risks only (a security owner); cannot create scans or read |
 
 A missing or wrong key returns `401`, and a valid key without permission returns `403`, both as Problem Details. `/actuator/health` and `/actuator/info` are open so that probes keep working. An unset key matches nothing.
 
@@ -233,6 +235,8 @@ Dockerfile, docker-compose.yml    Container image and the full local stack
 - **At-least-once delivery.** Duplicates are possible. They are handled by the status check (a finished scan is skipped) and by the unique constraint on findings. This is simpler than exactly-once, which Kafka only supports with transactions end to end.
 - **Static API keys.** Keys are set through environment variables. There is no rotation, no per-application key, and no audit of who used which key. Acceptable for a small team; a real deployment would move keys to a secret store and add per-client identity.
 - **Metrics are only as protected as the keys.** `/actuator/prometheus` needs any valid key. Prometheus should scrape from a private network.
+- **An expired risk acceptance reopens only at the next scan.** Nothing runs on the clock, so a finding can stay `ACCEPTED_RISK` past its date until a scan reports it again. A scheduled job would close that gap.
+- **`acceptedBy` is not verified.** The key says the caller holds the risk role, not who the person is. Per-person identity needs real user accounts.
 - **Dead-letter messages are not replayed automatically.** An engineer inspects `scan-submitted.DLT`, fixes the cause, and re-submits. No replay tool yet.
 - **Dependency scan is slow.** The OWASP NVD database is large. It runs on `main` and weekly, not on every pull request, so a vulnerable change can merge before the scan catches it.
 - **Single instance.** Scheduled CVE enrichment and the consumer assume one or a few instances. Running many would need coordination for the scheduler; partitions already spread the consumers.
@@ -244,10 +248,10 @@ Dockerfile, docker-compose.yml    Container image and the full local stack
 - [x] **M2 – Scan ingestion:** `POST /api/scans` for OWASP Dependency-Check reports, package-level upserts, auto-FIXED
 - [x] **M3 – NVD enrichment:** NVD API client with timeout, retry, circuit breaker, fallback and cache
 - [x] **M4 – Async processing:** Kafka, `202 Accepted`, scan status endpoint, retries, dead-letter topic, tests
-- [ ] **M5 – Security + observability** (in progress)
+- [x] **M5 – Security + observability**
   - [x] API key on write endpoints (`X-API-Key`, fail closed, 401 as Problem Details)
   - [x] Read access and roles: a read-only key, and writes need the ingest key (`403` for a valid key without permission)
-  - [ ] Role for risk acceptance (no endpoint for it yet)
+  - [x] Role for risk acceptance: `POST /api/findings/{id}/accept-risk` with its own key; the finding reopens when the acceptance expires and a scan still reports it
   - [x] Actuator and Micrometer metrics at `/actuator/prometheus`: Kafka consumer lag, NVD circuit breaker state, scans processed
   - [x] Correlation ID from request to log lines and Kafka message (`X-Correlation-Id`)
   - [x] Testcontainers (PostgreSQL 16 and Kafka 4.1) for all integration tests; CI no longer needs service containers

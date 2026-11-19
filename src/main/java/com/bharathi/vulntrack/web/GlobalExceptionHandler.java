@@ -20,6 +20,7 @@ import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExcep
 
 import com.bharathi.vulntrack.ingest.InvalidReportException;
 import com.bharathi.vulntrack.service.ConflictException;
+import com.bharathi.vulntrack.service.InvalidRequestException;
 import com.bharathi.vulntrack.service.NotFoundException;
 
 @RestControllerAdvice
@@ -48,6 +49,12 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     /** 400: the body isn't a usable Dependency-Check report. */
     @ExceptionHandler(InvalidReportException.class)
     public ProblemDetail handleInvalidReport(InvalidReportException ex) {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
+    }
+
+    /** 400: the request is well formed but breaks a business rule (e.g. an acceptance that expires in the past). */
+    @ExceptionHandler(InvalidRequestException.class)
+    public ProblemDetail handleInvalidRequest(InvalidRequestException ex) {
         return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
     }
 

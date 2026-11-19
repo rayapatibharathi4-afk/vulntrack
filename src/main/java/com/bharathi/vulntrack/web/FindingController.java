@@ -4,14 +4,19 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import jakarta.validation.Valid;
 
 import com.bharathi.vulntrack.domain.FindingStatus;
 import com.bharathi.vulntrack.domain.Severity;
 import com.bharathi.vulntrack.service.FindingFilter;
 import com.bharathi.vulntrack.service.FindingService;
+import com.bharathi.vulntrack.web.dto.AcceptRiskRequest;
 import com.bharathi.vulntrack.web.dto.FindingResponse;
 import com.bharathi.vulntrack.web.dto.PageResponse;
 
@@ -35,5 +40,11 @@ public class FindingController {
 
         FindingFilter filter = new FindingFilter(status, severity, applicationId, overdue);
         return PageResponse.from(service.search(filter, pageable));
+    }
+
+    /** Needs the RISK role (its own key). Ingest and read keys cannot accept risks. */
+    @PostMapping("/{id}/accept-risk")
+    public FindingResponse acceptRisk(@PathVariable Long id, @Valid @RequestBody AcceptRiskRequest request) {
+        return service.acceptRisk(id, request);
     }
 }
