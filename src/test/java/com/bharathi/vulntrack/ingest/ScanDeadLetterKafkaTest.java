@@ -10,6 +10,7 @@ import java.util.concurrent.TimeUnit;
 import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.common.serialization.StringDeserializer;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -45,11 +46,16 @@ class ScanDeadLetterKafkaTest {
     @Test
     void unparseableMessageIsDeadLetteredWithoutRetry() throws Exception {
         awaitPartitionAssignment();
-        kafka.send(KafkaTopics.SCAN_SUBMITTED, "app-1", "not-a-number").get(10, TimeUnit.SECONDS);
+        ProducerRecord<String, String> poison = new ProducerRecord<>(KafkaTopics.SCAN_SUBMITTED, "app-1", "not-a-number");
+        poison.headers().add("correlationId", "req-123".getBytes(StandardCharsets.UTF_8));
+        kafka.send(poison).get(10, TimeUnit.SECONDS);
 
         ConsumerRecord<String, String> dead = readOne(KafkaTopics.SCAN_SUBMITTED_DLT);
 
         assertThat(dead.value()).isEqualTo("not-a-number");
+        // The original headers survive the dead-letter hop, so the failure can be traced to its request
+        assertThat(new String(dead.headers().lastHeader("correlationId").value(), StandardCharsets.UTF_8))
+                .isEqualTo("req-123");
         // The listener wraps the error; the root cause header shows why it was dead-lettered
         String exception = new String(dead.headers().lastHeader("kafka_dlt-exception-cause-fqcn").value(),
                 StandardCharsets.UTF_8);

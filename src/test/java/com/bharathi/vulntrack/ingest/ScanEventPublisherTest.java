@@ -2,16 +2,19 @@ package com.bharathi.vulntrack.ingest;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.nio.charset.StandardCharsets;
 import java.util.concurrent.CompletableFuture;
 
+import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.clients.producer.RecordMetadata;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
+import org.slf4j.MDC;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.ApplicationEventPublisher;
@@ -19,6 +22,8 @@ import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.support.SendResult;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.transaction.support.TransactionTemplate;
+
+import com.bharathi.vulntrack.config.CorrelationId;
 
 /**
  * The publisher must send to Kafka only after the transaction commits.
@@ -41,16 +46,28 @@ class ScanEventPublisherTest {
     TransactionTemplate tx;
 
     @Test
-    void sendsNothingUntilTheTransactionCommits() {
-        when(kafka.send(eq(KafkaTopics.SCAN_SUBMITTED), any(), any()))
+    void sendsNothingUntilTheTransactionCommitsThenSendsWithTheCorrelationId() {
+        when(kafka.send(any(ProducerRecord.class)))
                 .thenReturn(CompletableFuture.completedFuture(successResult()));
 
-        tx.executeWithoutResult(status -> {
-            events.publishEvent(new ScanSubmittedEvent(7L, 3L));
-            verify(kafka, never()).send(any(), any(), any());
-        });
+        MDC.put(CorrelationId.MDC_KEY, "req-42");
+        try {
+            tx.executeWithoutResult(status -> {
+                events.publishEvent(new ScanSubmittedEvent(7L, 3L));
+                verify(kafka, never()).send(any(ProducerRecord.class));
+            });
+        } finally {
+            MDC.remove(CorrelationId.MDC_KEY);
+        }
 
-        verify(kafka).send(KafkaTopics.SCAN_SUBMITTED, "3", "7");
+        ArgumentCaptor<ProducerRecord<String, String>> sent = ArgumentCaptor.forClass(ProducerRecord.class);
+        verify(kafka).send(sent.capture());
+        ProducerRecord<String, String> record = sent.getValue();
+        assertThat(record.topic()).isEqualTo(KafkaTopics.SCAN_SUBMITTED);
+        assertThat(record.key()).isEqualTo("3");
+        assertThat(record.value()).isEqualTo("7");
+        assertThat(new String(record.headers().lastHeader(CorrelationId.MDC_KEY).value(), StandardCharsets.UTF_8))
+                .isEqualTo("req-42");
     }
 
     @Test
@@ -60,14 +77,14 @@ class ScanEventPublisherTest {
             status.setRollbackOnly();
         });
 
-        verify(kafka, never()).send(any(), any(), any());
+        verify(kafka, never()).send(any(ProducerRecord.class));
     }
 
     @Test
     void aFailedSendIsLoggedAndDoesNotFailTheRequest() {
         CompletableFuture<SendResult<String, String>> failed = new CompletableFuture<>();
         failed.completeExceptionally(new RuntimeException("broker down"));
-        when(kafka.send(eq(KafkaTopics.SCAN_SUBMITTED), any(), any())).thenReturn(failed);
+        when(kafka.send(any(ProducerRecord.class))).thenReturn(failed);
 
         // Must not throw: the scan stays RECEIVED and the request has already been answered
         tx.executeWithoutResult(status -> events.publishEvent(new ScanSubmittedEvent(9L, 3L)));

@@ -40,6 +40,31 @@
 **Known gaps (for later steps)**
 - Duplicate-delivery test not written yet — Step 4.
 
+## Milestone 5 — Step 2: correlation IDs across HTTP, logs and Kafka
+
+**What changed**
+- `CorrelationIdFilter` (first in the chain): takes `X-Correlation-Id` from the request or makes a UUID. Puts it in the
+  logging context (MDC), echoes it in the response, and clears it at the end (threads are reused).
+- Incoming ids are accepted only if they match `[A-Za-z0-9-]{1,64}`. Anything else is replaced. This stops a client
+  from injecting newlines into the logs.
+- `ScanEventPublisher` copies the id into a Kafka header on the message. The send callback runs on Kafka's thread,
+  so the id is read on the request thread first and passed in.
+- `ScanConsumer` restores the id from the header while processing, then clears it.
+- Log pattern `%5p [%X{correlationId:-}]` prints the id on every line.
+
+**Errors hit**
+- `ScanEventPublisherTest` failed after the change. It still verified the old `send(topic, key, value)` overload, and the
+  publisher now sends a `ProducerRecord`. Fixed by capturing the record and checking topic, key, value and header.
+
+**Known gap**
+- If the DLT recoverer logs a failure, the consumer's MDC has already been cleared, so that log line has no id. The
+  id is still on the dead-letter record as a header.
+
+**Verification**
+- `.\mvnw.cmd clean verify`: exit 0, 45 tests green. Filter tests (4): echo, unsafe id replaced, id generated,
+  context cleared. Publisher test now checks the header. DLT test checks that the header survives the dead-letter hop.
+- Live check: **not run** (old app still on port 8080).
+
 ## Milestone 5 — Step 1: API key on write endpoints
 
 **What changed**
