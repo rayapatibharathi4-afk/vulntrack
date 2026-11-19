@@ -40,6 +40,35 @@
 **Known gaps (for later steps)**
 - Duplicate-delivery test not written yet — Step 4.
 
+## Milestone 6 — Step 2: OWASP Dependency-Check in CI
+
+**What changed**
+- `pom.xml`: profile `security-scan` with `dependency-check-maven` 13.0.0 (published 2026-08-03, older than two weeks)
+  and `failBuildOnCVSS=7`, so any CVE with CVSS 7.0 or higher fails the build. The plugin is in a profile only: it is
+  not bound to any lifecycle phase, so `clean verify` never runs it.
+- `.github/workflows/ci.yml`: new job `dependency-check`. It runs `./mvnw -B -Psecurity-scan org.owasp:dependency-check-maven:check`
+  on pushes to `main` and weekly (cron). It is skipped on pull requests because the NVD download is slow.
+  The NVD key comes from the repository secret `NVD_API_KEY` through `env:`. The reports are uploaded as an artifact.
+  Timeout 90 minutes.
+
+**Why a separate job and profile**
+- The first run downloads the whole NVD database. Without a key the API allows far fewer requests, so the download
+  can take hours. Putting it in every build would make pull requests unusable.
+
+**Verification**
+- `./mvnw -Psecurity-scan help:effective-pom`: the profile's settings (`failBuildOnCVSS=7`, version 13.0.0) are active.
+  The default effective POM does not include the plugin in its build.
+- `clean verify` still passes: exit 0, 50 tests green.
+- **Not run:** the scan itself. It needs the full NVD download, which I did not start locally (hours without a key).
+  The first CI run is the real test. Also needed: add the `NVD_API_KEY` repository secret. Without it, the first run
+  may hit the 90-minute timeout.
+
+**Alternatives considered**
+- Running the scan on every pull request: safer, but too slow and too many NVD requests.
+- Caching the NVD database between runs (`actions/cache`): would make later runs faster. Not added yet; it is an easy follow-up.
+- A suppression file for known false positives: not needed yet. If the first run flags something that is not a real
+  risk, add it to a suppression file with a reason.
+
 ## Milestone 6 — Step 1: container image and the app in compose
 
 **What changed**

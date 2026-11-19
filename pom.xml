@@ -162,4 +162,33 @@
 		</plugins>
 	</build>
 
+	<profiles>
+		<!--
+		  Dependency vulnerability scan (OWASP Dependency-Check). Not part of the normal build:
+		  the first run downloads the NVD database, which takes a long time without an API key.
+		  CI runs it as its own job:  ./mvnw -Psecurity-scan org.owasp:dependency-check-maven:check
+		  The NVD key is read from the NVD_API_KEY environment variable (a CI secret), never from this file.
+		  Fails the build for any CVE with CVSS 7.0 or higher (high and critical).
+		-->
+		<profile>
+			<id>security-scan</id>
+			<build>
+				<plugins>
+					<plugin>
+						<groupId>org.owasp</groupId>
+						<artifactId>dependency-check-maven</artifactId>
+						<version>13.0.0</version>
+						<configuration>
+							<failBuildOnCVSS>7</failBuildOnCVSS>
+							<formats>
+								<format>HTML</format>
+								<format>JSON</format>
+							</formats>
+						</configuration>
+					</plugin>
+				</plugins>
+			</build>
+		</profile>
+	</profiles>
+
 </project>

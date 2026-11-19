@@ -205,7 +205,7 @@ scripts/                          Local development helpers (seed data)
   - [x] Actuator and Micrometer metrics at `/actuator/prometheus`: Kafka consumer lag, NVD circuit breaker state, scans processed
   - [x] Correlation ID from request to log lines and Kafka message (`X-Correlation-Id`)
   - [x] Testcontainers (PostgreSQL 16 and Kafka 4.1) for all integration tests; CI no longer needs service containers
-- [ ] **M6 – Ship it:** ~~GitHub Actions build + tests~~ ✅ done · multi-stage Dockerfile · Dependency-Check on this repo
+- [ ] **M6 – Ship it:** ~~GitHub Actions build + tests~~ ✅ done · ~~multi-stage Dockerfile~~ ✅ done · ~~OWASP Dependency-Check in CI (fails on CVSS 7+)~~ ✅ done · final README and interview notes
 
 ## Author
 

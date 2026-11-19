@@ -4,6 +4,9 @@ on:
   push:
     branches: [main]
   pull_request:
+  schedule:
+    # Weekly, so new CVEs are found even when no code changes
+    - cron: '0 6 * * 1'
 
 permissions:
   contents: read
@@ -28,3 +31,34 @@ jobs:
 
       - name: Build and test
         run: ./mvnw -B clean verify
+
+  dependency-check:
+    # Slow (downloads the NVD database), so it runs on pushes to main and weekly, not on every pull request
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v5
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: OWASP Dependency-Check (fails on CVSS 7.0 or higher)
+        # The key is a repository secret. Without it the scan still runs, but the NVD download is much slower.
+        env:
+          NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
+        run: ./mvnw -B -Psecurity-scan org.owasp:dependency-check-maven:check
+
+      - name: Upload the scan report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dependency-check-report
+          path: target/dependency-check-report.*
+          if-no-files-found: ignore
