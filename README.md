@@ -6,7 +6,7 @@
 
 VulnTrack is a backend service that ingests dependency vulnerability scan reports from CI pipelines, enriches each CVE with data from the NVD API, tracks every finding against a severity-based SLA, and exposes REST APIs for listing, assigning and closing findings. Scans are processed asynchronously through Kafka, so a slow NVD API or a large report never blocks the CI pipeline.
 
-**Status:** work in progress. Milestones 0–2 are done (data model, scan ingestion, Findings API, error handling, 20 tests, CI). NVD enrichment, Kafka and security are designed and next. See [Roadmap](#roadmap)..
+**Status:** work in progress. Milestones 0–4 are done: data model, scan ingestion, Findings API, NVD enrichment, and asynchronous Kafka processing with retries and a dead-letter topic. Security and observability come next. See [Roadmap](#roadmap).
 
 ---
 
@@ -51,7 +51,7 @@ One Spring Boot deployable with two logical parts (REST APIs + Kafka consumer). 
 | Language | Java 21 |
 | Framework | Spring Boot 4.1 (Web MVC, Data JPA, Validation, Actuator) |
 | Database | PostgreSQL 16, Flyway migrations |
-| Messaging | Kafka (KRaft) — *planned* |
+| Messaging | Kafka 4.1 (KRaft), Spring for Apache Kafka, dead-letter topic |
 | Resilience / cache | Resilience4j, Caffeine — *planned* |
 | Security | Spring Security, JWT (ADMIN / VIEWER) — *planned* |
 | Tests | JUnit 5, AssertJ, Mockito, MockMvc; Testcontainers — *planned* |
@@ -98,8 +98,12 @@ docker exec -i vulntrack-postgres psql -U vulntrack -d vulntrack < scripts/dev-s
 | `GET` | `/api/applications` | List applications (paged, sorted by name) |
 | `GET` | `/api/findings` | List findings with optional filters (paged, most urgent first) |
 | `GET` | `/actuator/health` | Health, including database, liveness and readiness |
-| `POST` | `/api/scans?application={name}` | Submit an OWASP Dependency-Check JSON report. `201` + summary (new, already tracked, fixed) |
-| `GET` | `/api/scans/{id}` | Scan status and timestamps |
+| `POST` | `/api/scans?application={name}` | Submit an OWASP Dependency-Check JSON report. `202 Accepted` + `Location` header, status `RECEIVED`. Processing happens asynchronously |
+| `GET` | `/api/scans/{id}` | Scan status (`RECEIVED`, `PROCESSING`, `COMPLETED`, `FAILED`) and timestamps |
+
+**Async processing.** A submitted scan is stored as `RECEIVED` and announced on the `scan-submitted` topic after the database commit. A consumer processes it and sets `COMPLETED`. Failed messages are retried three times with exponential backoff (1s, 2s, 4s). A report that cannot be parsed is not retried. When retries run out, the scan is marked `FAILED` and the message moves to `scan-submitted.DLT`.
+
+Delivery is at least once, so the consumer ignores scans that are already `COMPLETED` or `FAILED`. A duplicate message does no work.
 
 **Findings filters** (all optional, combinable):
 
@@ -167,8 +171,8 @@ scripts/                          Local development helpers (seed data)
 - [x] **M0 – Setup:** Spring Boot + PostgreSQL in Docker, health check
 - [x] **M1 – Data model + CRUD:** Flyway schema, entities, Applications and Findings APIs, error handling, tests
 - [x] **M2 – Scan ingestion:** `POST /api/scans` for OWASP Dependency-Check reports, package-level upserts, auto-FIXED
-- [ ] **M3 – NVD enrichment:** NVD API client with timeout, retry, circuit breaker, fallback and cache
-- [ ] **M4 – Async processing:** Kafka, `202 Accepted`, scan status endpoint, dead-letter topic
+- [x] **M3 – NVD enrichment:** NVD API client with timeout, retry, circuit breaker, fallback and cache
+- [x] **M4 – Async processing:** Kafka, `202 Accepted`, scan status endpoint, retries, dead-letter topic, tests
 - [ ] **M5 – Security + observability:** JWT roles, correlation IDs, Prometheus metrics, Testcontainers
 - [ ] **M6 – Ship it:** ~~GitHub Actions build + tests~~ ✅ done · multi-stage Dockerfile · Dependency-Check on this repo
 
