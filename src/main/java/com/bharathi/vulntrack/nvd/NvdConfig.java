@@ -15,7 +15,10 @@ import com.github.benmanes.caffeine.cache.Caffeine;
 
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerConfig;
+import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
 import io.github.resilience4j.core.IntervalFunction;
+import io.github.resilience4j.micrometer.tagged.TaggedCircuitBreakerMetrics;
+import io.micrometer.core.instrument.MeterRegistry;
 import io.github.resilience4j.retry.Retry;
 import io.github.resilience4j.retry.RetryConfig;
 
@@ -42,10 +45,14 @@ public class NvdConfig {
     }
 
     @Bean
-    public ResilientNvdClient resilientNvdClient(NvdClient nvdClient) {
-        CircuitBreaker circuitBreaker = circuitBreaker(10, Duration.ofSeconds(60));
+    public ResilientNvdClient resilientNvdClient(NvdClient nvdClient, MeterRegistry meters) {
+        // The breaker is created through a registry so Micrometer can see it
+        CircuitBreakerRegistry breakers = CircuitBreakerRegistry.ofDefaults();
+        CircuitBreaker circuitBreaker = breakers.circuitBreaker("nvd", circuitBreakerConfig(10, Duration.ofSeconds(60)));
         circuitBreaker.getEventPublisher().onStateTransition(event ->
                 log.warn("NVD circuit breaker: {}", event.getStateTransition()));
+        // Exposes state (open/closed/half-open) and call outcomes as resilience4j_circuitbreaker_* metrics
+        TaggedCircuitBreakerMetrics.ofCircuitBreakerRegistry(breakers).bindTo(meters);
 
         Cache<String, CveDetails> cache = Caffeine.newBuilder()
                 .maximumSize(10_000)
@@ -67,7 +74,11 @@ public class NvdConfig {
 
     /** Opens when at least half of the last N calls failed; tries again after openWait. */
     static CircuitBreaker circuitBreaker(int windowSize, Duration openWait) {
-        CircuitBreakerConfig config = CircuitBreakerConfig.custom()
+        return CircuitBreaker.of("nvd", circuitBreakerConfig(windowSize, openWait));
+    }
+
+    static CircuitBreakerConfig circuitBreakerConfig(int windowSize, Duration openWait) {
+        return CircuitBreakerConfig.custom()
                 .slidingWindowType(CircuitBreakerConfig.SlidingWindowType.COUNT_BASED)
                 .slidingWindowSize(windowSize)
                 .minimumNumberOfCalls(windowSize)
@@ -76,6 +87,5 @@ public class NvdConfig {
                 .permittedNumberOfCallsInHalfOpenState(2)
                 .recordException(ResilientNvdClient::isTransient)
                 .build();
-        return CircuitBreaker.of("nvd", config);
     }
 }

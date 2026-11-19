@@ -10,6 +10,8 @@ import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.ApplicationEventPublisher;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -45,12 +47,14 @@ public class ScanIngestionService {
     private final SlaCalculator slaCalculator;
     private final Clock clock;
     private final ApplicationEventPublisher events;
+    private final Counter scansCompleted;
+    private final Counter scansFailed;
 
     public ScanIngestionService(ApplicationRepository applications, ScanRepository scans,
                                 DependencyRepository dependencies, CveRepository cves,
                                 FindingRepository findings, DependencyCheckReportParser parser,
                                 SlaCalculator slaCalculator, Clock clock,
-                                ApplicationEventPublisher events) {
+                                ApplicationEventPublisher events, MeterRegistry meters) {
         this.applications = applications;
         this.scans = scans;
         this.dependencies = dependencies;
@@ -60,6 +64,12 @@ public class ScanIngestionService {
         this.slaCalculator = slaCalculator;
         this.clock = clock;
         this.events = events;
+        this.scansCompleted = Counter.builder("vulntrack.scans.processed")
+                .description("Scans processed, by outcome")
+                .tag("outcome", "completed").register(meters);
+        this.scansFailed = Counter.builder("vulntrack.scans.processed")
+                .description("Scans processed, by outcome")
+                .tag("outcome", "failed").register(meters);
     }
 
     /** Async path, used by the API: validate, store as RECEIVED, hand off to Kafka after commit. */
@@ -99,6 +109,7 @@ public class ScanIngestionService {
             log.info("Scan {} is already {}, leaving it unchanged", scanId, found.get().getStatus());
         } else {
             found.get().markFailed(clock.instant());
+            scansFailed.increment();
             log.warn("Scan {} marked FAILED after retries", scanId);
         }
     }
@@ -165,6 +176,7 @@ public class ScanIngestionService {
                 parsed.size(), created, parsed.size() - created, fixed);
         log.info("Scan {} for {}: {} in report, {} new, {} fixed",
                 scan.getId(), app.getName(), parsed.size(), created, fixed);
+        scansCompleted.increment();
         return result;
     }
 

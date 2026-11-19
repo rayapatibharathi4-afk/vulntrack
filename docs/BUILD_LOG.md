@@ -40,6 +40,35 @@
 **Known gaps (for later steps)**
 - Duplicate-delivery test not written yet — Step 4.
 
+## Milestone 5 — Step 3: metrics for Kafka lag, the NVD circuit breaker and scans processed
+
+**What changed**
+- `/actuator/prometheus` is exposed (with health, info and metrics). Dependencies: `micrometer-registry-prometheus`
+  (version from Boot) and `resilience4j-micrometer` 2.3.0 (same version as the other resilience4j modules).
+- NVD circuit breaker: now created through a `CircuitBreakerRegistry` and bound with `TaggedCircuitBreakerMetrics`,
+  so `resilience4j_circuitbreaker_state` and the call counters appear. The test helper `NvdConfig.circuitBreaker(...)` is
+  unchanged, so the existing tests still use it.
+- `vulntrack.scans.processed{outcome=completed|failed}`: counted in `processScan` and in `markFailed`.
+- Kafka consumer lag: Boot registers Spring Kafka's consumer metrics with Micrometer. Nothing was added by hand.
+  `kafka_consumer_fetch_manager_records_lag` is checked in the test.
+
+**Errors hit**
+- `TaggedCircuitBreakerMetrics.ofCircuitBreaker` does not exist in 2.3.0. The class only has registry-based factories.
+  Checked the jar with `javap`, then built the breaker through a registry.
+- `/actuator/prometheus` returned 404 in the test. Boot's test support turns metrics export off unless the test has
+  `@AutoConfigureMetrics`. The condition report (`-Ddebug=true`) showed it: "management.defaults.metrics.export.enabled
+  is considered false".
+- Boot 4 moved test annotations: `AutoConfigureMockMvc` is in `org.springframework.boot.webmvc.test.autoconfigure`,
+  `AutoConfigureMetrics` is in `org.springframework.boot.micrometer.metrics.test.autoconfigure`.
+
+**Known gap**
+- `/actuator/prometheus` is public: the security rules allow all GETs. Before this is exposed outside a private network,
+  restrict the actuator endpoints (planned with the read roles).
+
+**Verification**
+- `.\mvnw.cmd clean verify`: exit 0, 46 tests green (`MetricsEndpointTest` added, with embedded Kafka).
+- Live check: **not run.** Old app still on port 8080.
+
 ## Milestone 5 — Step 2: correlation IDs across HTTP, logs and Kafka
 
 **What changed**
