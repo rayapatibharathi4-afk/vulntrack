@@ -38,5 +38,32 @@
   if the app crashes between commit and send, the scan stays `RECEIVED`. See the outbox note in the plan.
 
 **Known gaps (for later steps)**
-- No failure handling for poison messages yet — Step 3 (`DefaultErrorHandler` + DLT).
 - Duplicate-delivery test not written yet — Step 4.
+
+## Milestone 4 — Step 3: retries, dead-letter topic, FAILED status
+
+**What changed**
+- `ScanErrorHandlingConfig`: a `DefaultErrorHandler` bean. Boot picks it up for the listener container.
+  - Retries: 3 retries with exponential backoff, starting at 1s and doubling (1s, 2s, 4s), then give up.
+  - Not retried: `NumberFormatException` (message is not a scan id) and `InvalidReportException` (bad report).
+  - Recoverer: marks the scan FAILED, then publishes the record to `scan-submitted.DLT`
+    (`DeadLetterPublishingRecoverer`, same partition number).
+- `ScanIngestionService.markFailed(scanId)`: idempotent. Leaves COMPLETED and FAILED scans alone.
+- `application.properties`: added `spring.kafka.listener.concurrency=3` and
+  `spring.kafka.producer.properties.max.block.ms=5000`. Step 2 notes listed these, but they were missing from the file.
+
+**Errors hit**
+- `ExponentialBackOff` has no `setMaxRetries`. Used `ExponentialBackOffWithMaxRetries`, which lives in
+  `org.springframework.kafka.support`, not `org.springframework.util.backoff`. Found it by listing the jar.
+
+**Verification**
+- `.\mvnw.cmd clean verify`: exit 0, 32 tests green.
+- Live DLT path: **not yet run.** The Step 2 app process is still on port 8080 and could not be stopped
+  from here, so the new handler is not loaded. Pending a restart.
+
+**Alternatives considered**
+- Mark FAILED inside the consumer's catch block: rejected. It would also run on retryable errors, and the
+  scan's transaction has already rolled back, so it needs its own transaction. The recoverer is the one place
+  that knows retries are exhausted.
+- A separate listener on `scan-submitted.DLT` that marks scans FAILED: also works, but it is one more consumer
+  to run and to keep idempotent. Chose the recoverer so the mark and the publish happen in one call.

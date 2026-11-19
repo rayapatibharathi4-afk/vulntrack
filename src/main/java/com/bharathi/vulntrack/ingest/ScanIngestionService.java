@@ -88,6 +88,21 @@ public class ScanIngestionService {
         return Optional.of(processScan(scan, parser.parse(scan.getRawReport())));
     }
 
+    /** Called when a message ends in the dead-letter topic. Does not overwrite a finished scan. */
+    @Transactional
+    public void markFailed(Long scanId) {
+        Optional<Scan> found = scans.findById(scanId);
+        if (found.isEmpty()) {
+            log.warn("Scan {} not found, cannot mark FAILED", scanId);
+        } else if (found.get().getStatus() == ScanStatus.COMPLETED
+                || found.get().getStatus() == ScanStatus.FAILED) {
+            log.info("Scan {} is already {}, leaving it unchanged", scanId, found.get().getStatus());
+        } else {
+            found.get().markFailed(clock.instant());
+            log.warn("Scan {} marked FAILED after retries", scanId);
+        }
+    }
+
     /** Sync path, used by tests and tools: store and process in one transaction. */
     @Transactional
     public ScanResult ingest(String applicationName, String rawReport) {
