@@ -9,17 +9,20 @@ import java.util.Set;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.context.ApplicationEventPublisher;
-import io.micrometer.core.instrument.Counter;
-import io.micrometer.core.instrument.MeterRegistry;
+import org.slf4j.MDC;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
+
+import com.bharathi.vulntrack.config.CorrelationId;
 import com.bharathi.vulntrack.domain.Application;
 import com.bharathi.vulntrack.domain.Cve;
 import com.bharathi.vulntrack.domain.Dependency;
 import com.bharathi.vulntrack.domain.Finding;
 import com.bharathi.vulntrack.domain.FindingStatus;
+import com.bharathi.vulntrack.domain.OutboxEvent;
 import com.bharathi.vulntrack.domain.Scan;
 import com.bharathi.vulntrack.domain.ScanSource;
 import com.bharathi.vulntrack.domain.ScanStatus;
@@ -27,6 +30,7 @@ import com.bharathi.vulntrack.repository.ApplicationRepository;
 import com.bharathi.vulntrack.repository.CveRepository;
 import com.bharathi.vulntrack.repository.DependencyRepository;
 import com.bharathi.vulntrack.repository.FindingRepository;
+import com.bharathi.vulntrack.repository.OutboxEventRepository;
 import com.bharathi.vulntrack.repository.ScanRepository;
 import com.bharathi.vulntrack.service.NotFoundException;
 import com.bharathi.vulntrack.service.SlaCalculator;
@@ -46,7 +50,7 @@ public class ScanIngestionService {
     private final DependencyCheckReportParser parser;
     private final SlaCalculator slaCalculator;
     private final Clock clock;
-    private final ApplicationEventPublisher events;
+    private final OutboxEventRepository outbox;
     private final Counter scansCompleted;
     private final Counter scansFailed;
 
@@ -54,7 +58,7 @@ public class ScanIngestionService {
                                 DependencyRepository dependencies, CveRepository cves,
                                 FindingRepository findings, DependencyCheckReportParser parser,
                                 SlaCalculator slaCalculator, Clock clock,
-                                ApplicationEventPublisher events, MeterRegistry meters) {
+                                OutboxEventRepository outbox, MeterRegistry meters) {
         this.applications = applications;
         this.scans = scans;
         this.dependencies = dependencies;
@@ -63,7 +67,7 @@ public class ScanIngestionService {
         this.parser = parser;
         this.slaCalculator = slaCalculator;
         this.clock = clock;
-        this.events = events;
+        this.outbox = outbox;
         this.scansCompleted = Counter.builder("vulntrack.scans.processed")
                 .description("Scans processed, by outcome")
                 .tag("outcome", "completed").register(meters);
@@ -72,13 +76,19 @@ public class ScanIngestionService {
                 .tag("outcome", "failed").register(meters);
     }
 
-    /** Async path, used by the API: validate, store as RECEIVED, hand off to Kafka after commit. */
+    /**
+     * Async path, used by the API: validate, store as RECEIVED, and write the message to the outbox.
+     * The scan and its outbox row are committed together, or not at all. The OutboxRelay sends the message later.
+     */
     @Transactional
     public ScanResponse submit(String applicationName, String rawReport) {
         Application app = findApplication(applicationName);
         parser.parse(rawReport); // reject a broken report now (400), before anything is stored
-        Scan scan = scans.save(new Scan(app, ScanSource.OWASP, rawReport, clock.instant()));
-        events.publishEvent(new ScanSubmittedEvent(scan.getId(), app.getId()));
+        Instant now = clock.instant();
+        Scan scan = scans.save(new Scan(app, ScanSource.OWASP, rawReport, now));
+        outbox.save(new OutboxEvent(KafkaTopics.SCAN_SUBMITTED,
+                String.valueOf(app.getId()), String.valueOf(scan.getId()),
+                MDC.get(CorrelationId.MDC_KEY), now));
         return ScanResponse.from(scan);
     }
 

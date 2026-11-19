@@ -22,6 +22,7 @@ import com.bharathi.vulntrack.PostgresContainerConfig;
 @SpringBootTest(properties = {
         "vulntrack.enrichment.enabled=false",
         "vulntrack.scan-consumer.enabled=true",
+        "vulntrack.outbox.enabled=false",
         "vulntrack.security.read-api-key=test-only-read-key" // dummy, test only
 })
 @AutoConfigureMockMvc

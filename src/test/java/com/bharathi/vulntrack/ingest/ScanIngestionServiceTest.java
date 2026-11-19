@@ -23,11 +23,13 @@ import com.bharathi.vulntrack.domain.FindingStatus;
 import com.bharathi.vulntrack.domain.ScanStatus;
 import com.bharathi.vulntrack.repository.ApplicationRepository;
 import com.bharathi.vulntrack.repository.FindingRepository;
+import com.bharathi.vulntrack.repository.OutboxEventRepository;
 import com.bharathi.vulntrack.service.NotFoundException;
 
 @SpringBootTest(properties = {
         "vulntrack.enrichment.enabled=false",
         "vulntrack.scan-consumer.enabled=false",
+        "vulntrack.outbox.enabled=false",
         "spring.kafka.admin.auto-create=false"
 })
 @Import(PostgresContainerConfig.class)
@@ -44,6 +46,9 @@ class ScanIngestionServiceTest {
 
     @Autowired
     private FindingRepository findings;
+
+    @Autowired
+    private OutboxEventRepository outbox;
 
     private Application app;
     private String report;
@@ -119,6 +124,20 @@ class ScanIngestionServiceTest {
         assertThat(after.getFirstSeenVersion()).isEqualTo("2.14.1");
         assertThat(after.getDependency().getVersion()).isEqualTo("2.15.0");
         assertThat(after.getStatus()).isEqualTo(FindingStatus.OPEN);
+    }
+
+    @Test
+    void submitWritesTheMessageToTheOutboxInTheSameTransaction() {
+        Long scanId = service.submit(APP, report).id();
+
+        assertThat(outbox.findAll())
+                .filteredOn(event -> event.getPayload().equals(String.valueOf(scanId)))
+                .singleElement()
+                .satisfies(event -> {
+                    assertThat(event.getTopic()).isEqualTo(KafkaTopics.SCAN_SUBMITTED);
+                    assertThat(event.getMessageKey()).isEqualTo(String.valueOf(app.getId()));
+                    assertThat(event.getSentAt()).isNull(); // not sent yet: the relay does that later
+                });
     }
 
     @Test

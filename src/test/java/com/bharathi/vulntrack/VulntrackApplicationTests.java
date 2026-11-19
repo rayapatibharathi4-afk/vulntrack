@@ -7,6 +7,7 @@ import org.springframework.context.annotation.Import;
 @SpringBootTest(properties = {
         "vulntrack.enrichment.enabled=false",
         "vulntrack.scan-consumer.enabled=false",
+        "vulntrack.outbox.enabled=false",
         "spring.kafka.admin.auto-create=false"
 })
 @Import(PostgresContainerConfig.class)

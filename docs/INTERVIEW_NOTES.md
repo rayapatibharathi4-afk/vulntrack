@@ -67,8 +67,9 @@ Kafka consumer, packaged as a container, with API-key auth, metrics and a CI pip
 - **Why a partition key of the application id:** messages for one application stay in order.
 - **Why bad input is not retried:** a message that is not a number, or a report that cannot be parsed, will never
   succeed. Retrying only delays it and blocks the partition behind it.
-- **Trade-off, the dual write:** the scan is saved, then the message is sent. A crash between the two leaves the scan
-  `RECEIVED`. A transactional outbox would close this. Not built, and discussed in the README.
+- **The dual write, and how it was closed:** at first the scan was saved and then the message was sent. A crash in
+  between left the scan `RECEIVED` forever. Now the scan and an outbox row are written in one transaction, and a relay
+  sends the outbox rows. See the outbox section below.
 - **Bugs found while testing (good interview material):**
   - The dead-letter topic was named `scan-submitted-dlt` by Spring's default, not `scan-submitted.DLT`. Found only by
     an end-to-end test that checked where the message actually went.
@@ -94,6 +95,26 @@ Kafka consumer, packaged as a container, with API-key auth, metrics and a CI pip
 - **Trade-off:** `/actuator/prometheus` needs any valid key, so protection depends on key handling.
 - **Likely question:** *Why 403 and not 401 for a read-only key trying to write?* 401 means the caller is not
   identified. This key is identified and simply not allowed, so 403 is the accurate answer.
+
+### Transactional outbox (extension of M4)
+
+- **What:** the scan row and an `outbox_event` row are written in the same transaction. A scheduled relay reads
+  the unsent rows, sends each one to Kafka, and marks it sent only after the broker acknowledges it.
+- **Why:** the old design saved the scan and then sent the message. A crash between the two left the scan
+  `RECEIVED` forever. Now the message exists if and only if the scan exists, because they commit together.
+- **Why the relay stops at the first failure:** sending later rows past a failed one would break the order per
+  application. The trade-off is that one stuck message delays the ones behind it.
+- **Why a crash after send can duplicate a message:** the mark happens after the send. A crash in between sends it
+  again. The consumer already skips finished scans, so the duplicate does no work.
+- **Multiple instances:** the relay selects rows with `FOR NO KEY UPDATE SKIP LOCKED`, so two instances take different
+  rows. The SQL in the logs shows the clause.
+- **Bug found while building it:** the scheduled method called another method on the same class that was marked
+  `@Transactional`. The call skipped the proxy, so there was no transaction and the lock query failed with
+  "No active transaction". Fix: the annotation goes on the scheduled method itself.
+- **Likely question:** *What is the difference between at-most-once, at-least-once and exactly-once?* At-most-once can lose
+  a message; this design never does that. At-least-once can repeat one, which this design allows, and the consumer makes
+  repeats harmless. Exactly-once across a database and Kafka needs transactions spanning both, which Kafka cannot
+  provide with a database.
 
 ### Risk acceptance (closing out M5)
 
@@ -127,7 +148,7 @@ Kafka consumer, packaged as a container, with API-key auth, metrics and a CI pip
 
 ## Known gaps, stated plainly
 
-- No transactional outbox (dual write between the database and Kafka).
+- One stuck outbox message delays the messages behind it until it is fixed (by design, to keep order).
 - An expired risk acceptance reopens only at the next scan, not on the clock.
 - `acceptedBy` is written as given; it is not an authenticated identity.
 - No assigning or closing of findings through the API.

@@ -35,8 +35,9 @@ VulnTrack answers that:
 ```mermaid
 flowchart LR
     CI[CI pipeline] -->|POST /api/scans, X-API-Key| API[REST API]
-    API -->|save as RECEIVED| DB[(PostgreSQL)]
-    API -->|publish after commit| K[[Kafka: scan-submitted]]
+    API -->|scan + outbox row, one transaction| DB[(PostgreSQL)]
+    R[Outbox relay] -->|read unsent, send, mark sent| DB
+    R -->|send in order| K[[Kafka: scan-submitted]]
     K -->|consume, retry 3 times| P[Scan processor]
     P -->|upsert findings| DB
     P -->|fail after retries| D[[Kafka: scan-submitted.DLT]]
@@ -149,7 +150,7 @@ A correlation ID travels with each request. Send `X-Correlation-Id: <id>` to cho
 
 A missing or wrong key returns `401`, and a valid key without permission returns `403`, both as Problem Details. `/actuator/health` and `/actuator/info` are open so that probes keep working. An unset key matches nothing.
 
-**Async processing.** A submitted scan is stored as `RECEIVED` and announced on the `scan-submitted` topic after the database commit. A consumer processes it and sets `COMPLETED`. Failed messages are retried three times with exponential backoff (1s, 2s, 4s). A report that cannot be parsed is not retried. When retries run out, the scan is marked `FAILED` and the message moves to `scan-submitted.DLT`.
+**Async processing.** A submitted scan is stored as `RECEIVED`, in the same transaction as an outbox row that describes the Kafka message. A relay sends the outbox rows to the `scan-submitted` topic, in order, and marks each one sent once the broker acknowledges it. A consumer processes the scan and sets `COMPLETED`. Failed messages are retried three times with exponential backoff (1s, 2s, 4s). A report that cannot be parsed is not retried. When retries run out, the scan is marked `FAILED` and the message moves to `scan-submitted.DLT`.
 
 Delivery is at least once, so the consumer ignores scans that are already `COMPLETED` or `FAILED`. A duplicate message does no work.
 
@@ -223,7 +224,7 @@ Dockerfile, docker-compose.yml    Container image and the full local stack
 5. **Testable time.** "Now" comes from an injected `Clock`, so overdue logic is tested with fixed dates.
 6. **SQL over NoSQL.** Relational data, uniqueness rules and reporting queries with joins; JSONB keeps the raw report without a second database.
 7. **Spring Boot 4.** Boot 3.x reached end of open-source support in June 2026; a vulnerability tracker should not run on an unpatched framework.
-8. **Scans are accepted fast and processed later.** `POST` stores the report and returns `202` in milliseconds. The Kafka message is sent only after the commit, so the consumer never sees a scan that does not exist.
+8. **Scans are accepted fast and processed later, with no lost messages.** `POST` stores the report and an outbox row in one transaction, and returns `202` in milliseconds. A relay sends the message afterwards. If the process crashes after the commit, the row is still there and is sent on restart.
 9. **Failures are classified.** Bad input (a non-numeric message, an unparseable report) is never retried. Transient errors are retried three times with backoff, then the message goes to a dead-letter topic and the scan is marked `FAILED`, so nothing blocks the partition.
 10. **Two Kafka listeners.** Clients on the host use `localhost:9092`; containers on the compose network use `kafka:29092`. A broker advertises one address per listener, so both are needed.
 11. **API keys are hashed before comparison and fail closed.** Keys come from environment variables only. An unset key matches nothing. Two keys with separate roles: CI writes, dashboards only read.
@@ -231,7 +232,8 @@ Dockerfile, docker-compose.yml    Container image and the full local stack
 
 ## Trade-offs and known gaps
 
-- **Dual write, not an outbox.** The scan is saved, then the message is sent. If the process crashes between the two, the scan stays `RECEIVED` and is never processed. A transactional outbox would close this, at the cost of a table and a relay. Not built yet.
+- **Outbox relay: one bad message delays the ones behind it.** The relay sends in order and stops at the first failure, so a message the broker keeps rejecting holds back everything after it until it succeeds. That is the price of keeping order per application. The relay also holds row locks while it waits for the broker.
+- **Duplicates after a crash.** If the relay sends a message and crashes before marking it sent, the message is sent again. The consumer skips scans it has already finished, so this is harmless, but it does mean duplicate messages on the topic.
 - **At-least-once delivery.** Duplicates are possible. They are handled by the status check (a finished scan is skipped) and by the unique constraint on findings. This is simpler than exactly-once, which Kafka only supports with transactions end to end.
 - **Static API keys.** Keys are set through environment variables. There is no rotation, no per-application key, and no audit of who used which key. Acceptable for a small team; a real deployment would move keys to a secret store and add per-client identity.
 - **Metrics are only as protected as the keys.** `/actuator/prometheus` needs any valid key. Prometheus should scrape from a private network.
@@ -248,6 +250,7 @@ Dockerfile, docker-compose.yml    Container image and the full local stack
 - [x] **M2 – Scan ingestion:** `POST /api/scans` for OWASP Dependency-Check reports, package-level upserts, auto-FIXED
 - [x] **M3 – NVD enrichment:** NVD API client with timeout, retry, circuit breaker, fallback and cache
 - [x] **M4 – Async processing:** Kafka, `202 Accepted`, scan status endpoint, retries, dead-letter topic, tests
+- [x] **Transactional outbox (extension of M4):** scan and message written in one transaction, relay sends in order, crash-safe
 - [x] **M5 – Security + observability**
   - [x] API key on write endpoints (`X-API-Key`, fail closed, 401 as Problem Details)
   - [x] Read access and roles: a read-only key, and writes need the ingest key (`403` for a valid key without permission)

@@ -40,6 +40,40 @@
 **Known gaps (for later steps)**
 - Duplicate-delivery test not written yet — Step 4.
 
+## Extension of Milestone 4 — transactional outbox (closes the dual-write gap)
+
+**What changed**
+- `V4__outbox.sql`: table `outbox_event` (topic, message key, payload, correlation id, created and sent times), plus a
+  partial index on unsent rows.
+- `OutboxEvent` (entity) and `OutboxEventRepository`. The repository's query locks rows with `FOR NO KEY UPDATE SKIP LOCKED`
+  (Hibernate timeout hint -2), so two instances take different rows.
+- `ScanIngestionService.submit` writes the scan and the outbox row in one transaction. The correlation id is copied into the row.
+- `OutboxRelay`: `@Scheduled` every second (`vulntrack.outbox.delay`). Reads up to 100 unsent rows oldest first, sends each one
+  and waits up to 10 seconds for the acknowledgement, marks it sent, and stops at the first failure.
+- Removed `ScanEventPublisher` and `ScanSubmittedEvent` (the after-commit event). The outbox replaces them.
+- `vulntrack.outbox.enabled=false` in every test context except the new end-to-end test, so background sends do not run in
+  other tests.
+
+**Errors hit**
+1. The first Kafka run of the end-to-end test failed with `No active transaction`. Root cause: `relay()` (scheduled) called
+   `relayPending()` (annotated `@Transactional`) on the same object. Self-invocation bypasses the proxy, so no transaction
+   started, and the locking query needs one. Fix: `@Transactional` now sits on the scheduled method itself.
+2. My first import edit to `ScanIngestionService` dropped the Micrometer imports. The compile error named `MeterRegistry`.
+   Restored. Lesson: check the import block after a multi-line edit.
+3. The IDE showed "cannot be resolved" errors for new classes until the build ran. The compiler was the source of truth.
+
+**Alternatives considered**
+- Debezium / change data capture: more infrastructure than this project needs. The relay is about 50 lines.
+- Sending the message inside the transaction: rejected. A Kafka send cannot be rolled back, so a failed commit would leave a
+  message for a scan that does not exist.
+- Parallel sends: faster, but breaks the order per application. Kept sequential.
+
+**Verification**
+- `.\mvnw.cmd clean verify`: exit 0, 64 tests green (+3 relay unit tests, +1 service test for the outbox row, +1 end-to-end test
+  with a real broker: submit, relay sends, consumer completes the scan, outbox row marked sent).
+- The SQL log shows `for no key update of oe1_0 skip locked`.
+- Live check on the dev stack: **not run.** Old app still on port 8080.
+
 ## Milestone 5 — Step 6: risk acceptance role
 
 **What changed**
