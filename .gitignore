@@ -1,5 +1,10 @@
 HELP.md
 target/
+
+# Local settings and secrets (API keys belong in environment variables or a .env file that is never committed)
+.env
+*.env
+.env.*
 .mvn/wrapper/maven-wrapper.jar
 !**/src/main/**/target/
 !**/src/test/**/target/

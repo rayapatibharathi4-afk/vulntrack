@@ -56,7 +56,7 @@ class ScanIngestionServiceTest {
 
     @BeforeEach
     void setUp() throws IOException {
-        app = applications.save(new Application(APP, null, "test"));
+        app = applications.save(new Application(APP, null, "test", Instant.parse("2026-11-01T10:00:00Z")));
         try (InputStream in = getClass().getResourceAsStream("/reports/sample-dependency-check.json")) {
             report = new String(in.readAllBytes(), UTF_8);
         }

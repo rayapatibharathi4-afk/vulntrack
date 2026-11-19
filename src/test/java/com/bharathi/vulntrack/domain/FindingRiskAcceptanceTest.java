@@ -19,7 +19,7 @@ class FindingRiskAcceptanceTest {
 
     @BeforeEach
     void setUp() {
-        Application app = new Application("payments-service", null, "payments");
+        Application app = new Application("payments-service", null, "payments", SEEN);
         Dependency dependency = new Dependency(app, Ecosystem.MAVEN, "log4j-core", "2.14.1");
         Cve cve = new Cve("CVE-2021-44228", Severity.CRITICAL, new BigDecimal("10.0"), "Log4Shell");
         finding = new Finding(dependency, cve, SEEN, SEEN.plusSeconds(7 * 86_400L));

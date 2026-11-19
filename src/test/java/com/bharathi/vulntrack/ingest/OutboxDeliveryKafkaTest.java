@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.time.Instant;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.function.BooleanSupplier;
@@ -51,7 +52,7 @@ class OutboxDeliveryKafkaTest {
 
     @Test
     void submittedScanIsSentByTheRelayAndProcessed() throws IOException, InterruptedException {
-        applications.save(new Application("outbox-app", null, "test"));
+        applications.save(new Application("outbox-app", null, "test", Instant.parse("2026-11-01T10:00:00Z")));
         ScanResponse accepted = service.submit("outbox-app", sampleReport());
         Long scanId = accepted.id();
 

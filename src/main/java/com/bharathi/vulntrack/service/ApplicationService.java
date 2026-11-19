@@ -1,5 +1,7 @@
 package com.bharathi.vulntrack.service;
 
+import java.time.Clock;
+
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -14,9 +16,11 @@ import com.bharathi.vulntrack.web.dto.CreateApplicationRequest;
 public class ApplicationService {
 
     private final ApplicationRepository applications;
+    private final Clock clock;
 
-    public ApplicationService(ApplicationRepository applications) {
+    public ApplicationService(ApplicationRepository applications, Clock clock) {
         this.applications = applications;
+        this.clock = clock;
     }
 
     @Transactional
@@ -25,7 +29,7 @@ public class ApplicationService {
             throw new ConflictException("Application '" + request.name() + "' already exists");
         }
         Application saved = applications.save(
-                new Application(request.name(), request.repoUrl(), request.ownerTeam()));
+                new Application(request.name(), request.repoUrl(), request.ownerTeam(), clock.instant()));
         return ApplicationResponse.from(saved);
     }
 

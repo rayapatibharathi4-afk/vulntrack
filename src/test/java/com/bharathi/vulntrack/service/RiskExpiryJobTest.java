@@ -60,7 +60,7 @@ class RiskExpiryJobTest {
     @Test
     void reopensOnlyTheFindingsWhoseAcceptanceHasRunOut() {
         Instant now = clock.instant();
-        Application app = applications.save(new Application("expiry-job-app", null, "test"));
+        Application app = applications.save(new Application("expiry-job-app", null, "test", now));
         Dependency dependency = dependencies.save(new Dependency(app, Ecosystem.MAVEN, "expiry-lib", "1.0"));
 
         Finding expired = findings.save(acceptedFinding(dependency, "CVE-2099-EXPIRY-1", now, now.minus(10, ChronoUnit.DAYS),

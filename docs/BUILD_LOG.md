@@ -40,6 +40,25 @@
 **Known gaps (for later steps)**
 - Duplicate-delivery test not written yet — Step 4.
 
+## Review pass (before the final live checks)
+
+**Checked with commands:** `Instant.now()` and `currentTimeMillis` in main code; file names against class names; tracked
+files for secret-like values; `.gitignore` for local env files.
+
+**Found and fixed**
+- `Application` and `Scan` fell back to `Instant.now()` in `@PrePersist`. This broke the rule that time comes from the injected
+  `Clock`. In `Application` the fallback ran on every create, because the constructor never set `createdAt`. Fix: `Application`
+  takes `createdAt` from `ApplicationService`, which now has a `Clock`. The `@PrePersist` fallbacks are removed in both entities.
+- `.env` was not in `.gitignore`, although compose reads keys from `.env`. Added `.env`, `*.env` and `.env.*`.
+
+**Found, not fixed (decision needed)**
+- The `outbox_event` table is never cleaned up. Sent rows stay forever. A small scheduled job that deletes sent rows older than a
+  retention period would fix it.
+- `/actuator/prometheus` accepts any valid key, including the risk key. The risk key should only be able to accept risks.
+- Unknown URLs return 401 for anonymous callers, not 404 (noted earlier).
+
+**Verification:** `clean verify` exit 0, 67 tests green.
+
 ## Milestone 5 — Step 7: expiry job for accepted risks
 
 **What changed**

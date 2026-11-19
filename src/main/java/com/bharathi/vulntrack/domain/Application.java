@@ -7,7 +7,6 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
-import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
 
 @Entity
@@ -34,18 +33,12 @@ public class Application {
         // required by JPA
     }
 
-    public Application(String name, String repoUrl, String ownerTeam) {
+    /** createdAt comes from the caller's Clock, never from the system clock here. */
+    public Application(String name, String repoUrl, String ownerTeam, Instant createdAt) {
         this.name = name;
         this.repoUrl = repoUrl;
         this.ownerTeam = ownerTeam;
-    }
-
-    @PrePersist
-    @SuppressWarnings("unused") // called by Hibernate via reflection
-    void onCreate() {
-        if (createdAt == null) {
-            createdAt = Instant.now();
-        }
+        this.createdAt = createdAt;
     }
 
     public Long getId() { return id; }
