@@ -1,6 +1,7 @@
 package com.bharathi.vulntrack.ingest;
 
 import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.apache.kafka.common.TopicPartition;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Bean;
@@ -25,7 +26,9 @@ public class ScanErrorHandlingConfig {
     @Bean
     public CommonErrorHandler scanErrorHandler(ScanIngestionService service,
                                                KafkaTemplate<String, String> kafka) {
-        DeadLetterPublishingRecoverer dlt = new DeadLetterPublishingRecoverer(kafka);
+        // Spring's default name is "<topic>-dlt", which is not our topic. Route explicitly.
+        DeadLetterPublishingRecoverer dlt = new DeadLetterPublishingRecoverer(kafka,
+                (record, ex) -> new TopicPartition(KafkaTopics.SCAN_SUBMITTED_DLT, record.partition()));
         ConsumerRecordRecoverer recoverer = (ConsumerRecord<?, ?> record, Exception ex) -> {
             markScanFailed(service, record);
             dlt.accept(record, ex);

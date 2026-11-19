@@ -40,6 +40,39 @@
 **Known gaps (for later steps)**
 - Duplicate-delivery test not written yet — Step 4.
 
+## Milestone 4 — Step 4: tests for idempotency, publish-after-commit, dead-letter path
+
+**Bug found by the new test (fixed in this step, introduced in Step 3)**
+- Dead-lettered records went to `scan-submitted-dlt`, not `scan-submitted.DLT`. Spring's
+  `DeadLetterPublishingRecoverer` default name is `<topic>-dlt`. Unit tests did not catch it because nothing
+  checked the topic name. Fix: pass an explicit destination resolver to `KafkaTopics.SCAN_SUBMITTED_DLT`.
+  With broker auto-create on, the wrong topic would have been created silently.
+
+**What was added**
+- `ScanEventPublisherTest` (3): nothing is sent until commit; nothing is sent after rollback; a failed send
+  is logged, not thrown. Uses a `TransactionTemplate` and a mocked `KafkaTemplate`, so it writes no rows.
+- `ScanIngestionServiceTest` (+3): a duplicate `process` does the work once; `markFailed` flags an
+  unfinished scan; `markFailed` does not overwrite a COMPLETED scan.
+- `ScanDeadLetterKafkaTest` (1): end to end on an in-process broker (`@EmbeddedKafka`, no Docker). A poison
+  message is dead-lettered, and the root-cause header is `NumberFormatException`.
+- `pom.xml`: added `spring-kafka-test` (test scope, version managed by Boot).
+
+**Errors hit while getting the embedded-Kafka test green**
+1. Timeout, no record on the DLT. Root cause: the producer sent before any listener had a partition. Fixed by
+   waiting for an assignment (`KafkaListenerEndpointRegistry`) before sending.
+2. Topics were created with 1 partition by `@EmbeddedKafka`, while the `KafkaTopics` beans create 3. The
+   broker then created partitions while consumers joined, with NOT_COORDINATOR errors. Fixed by using 3 partitions.
+3. The DLT reader failed on the key. `KafkaTestUtils.consumerProps` defaults keys to Integer. Set String explicitly.
+4. The exception header holds Spring's wrapper `ListenerExecutionFailedException`. Asserted the cause header
+   `kafka_dlt-exception-cause-fqcn` instead.
+- `KafkaTestUtils.consumerProps(String,String,EmbeddedKafkaBroker)` is deprecated in Spring Kafka 4. It still
+  works. Replace before upgrading.
+
+**Verification**
+- `.\mvnw.cmd clean verify`: exit 0, 39 tests green (was 32).
+- Live demo of duplicate and poison messages: **pending.** The Step 2 app is still on port 8080 and the
+  Step 3 code (including the topic fix) is not loaded there.
+
 ## Milestone 4 — Step 3: retries, dead-letter topic, FAILED status
 
 **What changed**

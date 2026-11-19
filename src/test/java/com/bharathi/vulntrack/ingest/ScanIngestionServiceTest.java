@@ -17,6 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 import com.bharathi.vulntrack.domain.Application;
 import com.bharathi.vulntrack.domain.Finding;
 import com.bharathi.vulntrack.domain.FindingStatus;
+import com.bharathi.vulntrack.domain.ScanStatus;
 import com.bharathi.vulntrack.repository.ApplicationRepository;
 import com.bharathi.vulntrack.repository.FindingRepository;
 import com.bharathi.vulntrack.service.NotFoundException;
@@ -114,6 +115,37 @@ class ScanIngestionServiceTest {
         assertThat(after.getFirstSeenVersion()).isEqualTo("2.14.1");
         assertThat(after.getDependency().getVersion()).isEqualTo("2.15.0");
         assertThat(after.getStatus()).isEqualTo(FindingStatus.OPEN);
+    }
+
+    @Test
+    void processingTheSameScanTwiceOnlyDoesTheWorkOnce() {
+        Long scanId = service.submit(APP, report).id();
+
+        assertThat(service.process(scanId)).isPresent();
+        assertThat(service.process(scanId)).isEmpty(); // duplicate delivery from Kafka
+
+        assertThat(appFindings()).hasSize(4);
+        assertThat(service.getScan(scanId).status()).isEqualTo(ScanStatus.COMPLETED);
+    }
+
+    @Test
+    void markFailedFlagsAnUnfinishedScan() {
+        Long scanId = service.submit(APP, report).id();
+
+        service.markFailed(scanId);
+
+        assertThat(service.getScan(scanId).status()).isEqualTo(ScanStatus.FAILED);
+        assertThat(service.getScan(scanId).processedAt()).isNotNull();
+    }
+
+    @Test
+    void markFailedDoesNotOverwriteACompletedScan() {
+        Long scanId = service.submit(APP, report).id();
+        service.process(scanId);
+
+        service.markFailed(scanId);
+
+        assertThat(service.getScan(scanId).status()).isEqualTo(ScanStatus.COMPLETED);
     }
 
     @Test
