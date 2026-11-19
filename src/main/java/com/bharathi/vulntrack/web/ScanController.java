@@ -13,7 +13,6 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.bharathi.vulntrack.ingest.ScanIngestionService;
-import com.bharathi.vulntrack.ingest.ScanResult;
 import com.bharathi.vulntrack.web.dto.ScanResponse;
 
 @RestController
@@ -27,12 +26,13 @@ public class ScanController {
     }
 
     @PostMapping(consumes = MediaType.APPLICATION_JSON_VALUE)
-    public ResponseEntity<ScanResult> submit(@RequestParam String application,
-                                             @RequestBody String report) {
-        ScanResult result = service.ingest(application, report);
+    public ResponseEntity<ScanResponse> submit(@RequestParam String application,
+                                               @RequestBody String report) {
+        ScanResponse accepted = service.submit(application, report);
         return ResponseEntity
-                .created(URI.create("/api/scans/" + result.scanId()))
-                .body(result);
+                .accepted()
+                .location(URI.create("/api/scans/" + accepted.id()))
+                .body(accepted);
     }
 
     @GetMapping("/{id}")

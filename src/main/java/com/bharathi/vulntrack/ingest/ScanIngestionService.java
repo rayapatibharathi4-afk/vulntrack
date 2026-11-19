@@ -9,6 +9,7 @@ import java.util.Set;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -19,6 +20,7 @@ import com.bharathi.vulntrack.domain.Finding;
 import com.bharathi.vulntrack.domain.FindingStatus;
 import com.bharathi.vulntrack.domain.Scan;
 import com.bharathi.vulntrack.domain.ScanSource;
+import com.bharathi.vulntrack.domain.ScanStatus;
 import com.bharathi.vulntrack.repository.ApplicationRepository;
 import com.bharathi.vulntrack.repository.CveRepository;
 import com.bharathi.vulntrack.repository.DependencyRepository;
@@ -42,11 +44,13 @@ public class ScanIngestionService {
     private final DependencyCheckReportParser parser;
     private final SlaCalculator slaCalculator;
     private final Clock clock;
+    private final ApplicationEventPublisher events;
 
     public ScanIngestionService(ApplicationRepository applications, ScanRepository scans,
                                 DependencyRepository dependencies, CveRepository cves,
                                 FindingRepository findings, DependencyCheckReportParser parser,
-                                SlaCalculator slaCalculator, Clock clock) {
+                                SlaCalculator slaCalculator, Clock clock,
+                                ApplicationEventPublisher events) {
         this.applications = applications;
         this.scans = scans;
         this.dependencies = dependencies;
@@ -55,18 +59,60 @@ public class ScanIngestionService {
         this.parser = parser;
         this.slaCalculator = slaCalculator;
         this.clock = clock;
+        this.events = events;
     }
 
+    /** Async path, used by the API: validate, store as RECEIVED, hand off to Kafka after commit. */
+    @Transactional
+    public ScanResponse submit(String applicationName, String rawReport) {
+        Application app = findApplication(applicationName);
+        parser.parse(rawReport); // reject a broken report now (400), before anything is stored
+        Scan scan = scans.save(new Scan(app, ScanSource.OWASP, rawReport, clock.instant()));
+        events.publishEvent(new ScanSubmittedEvent(scan.getId(), app.getId()));
+        return ScanResponse.from(scan);
+    }
+
+    /** Called by the Kafka consumer. Safe to call more than once for the same scan. */
+    @Transactional
+    public Optional<ScanResult> process(Long scanId) {
+        Optional<Scan> found = scans.findById(scanId);
+        if (found.isEmpty()) {
+            log.warn("Scan {} not found, skipping", scanId);
+            return Optional.empty();
+        }
+        Scan scan = found.get();
+        if (scan.getStatus() == ScanStatus.COMPLETED || scan.getStatus() == ScanStatus.FAILED) {
+            log.info("Scan {} is already {}, skipping duplicate delivery", scanId, scan.getStatus());
+            return Optional.empty();
+        }
+        return Optional.of(processScan(scan, parser.parse(scan.getRawReport())));
+    }
+
+    /** Sync path, used by tests and tools: store and process in one transaction. */
     @Transactional
     public ScanResult ingest(String applicationName, String rawReport) {
-        Application app = applications.findByName(applicationName)
+        Application app = findApplication(applicationName);
+        List<ParsedFinding> parsed = parser.parse(rawReport);
+        Scan scan = scans.save(new Scan(app, ScanSource.OWASP, rawReport, clock.instant()));
+        return processScan(scan, parsed);
+    }
+
+    @Transactional(readOnly = true)
+    public ScanResponse getScan(Long id) {
+        return scans.findById(id)
+                .map(ScanResponse::from)
+                .orElseThrow(() -> new NotFoundException("Scan " + id + " not found"));
+    }
+
+    private Application findApplication(String applicationName) {
+        return applications.findByName(applicationName)
                 .orElseThrow(() -> new NotFoundException(
                         "Application '" + applicationName + "' is not registered"));
+    }
 
-        List<ParsedFinding> parsed = parser.parse(rawReport);
+    private ScanResult processScan(Scan scan, List<ParsedFinding> parsed) {
+        Application app = scan.getApplication();
         Instant now = clock.instant();
-
-                        Scan scan = scans.save(new Scan(app, ScanSource.OWASP, rawReport, now));
         scan.markProcessing();
 
         Set<Long> seenFindingIds = new HashSet<>();
@@ -91,7 +137,6 @@ public class ScanIngestionService {
             seenFindingIds.add(finding.getId());
         }
 
-        // Anything still active for this app but missing from this scan has been fixed
         int fixed = 0;
         for (Finding active : findings.findByDependencyApplicationIdAndStatusIn(app.getId(), ACTIVE)) {
             if (!seenFindingIds.contains(active.getId())) {
@@ -106,13 +151,6 @@ public class ScanIngestionService {
         log.info("Scan {} for {}: {} in report, {} new, {} fixed",
                 scan.getId(), app.getName(), parsed.size(), created, fixed);
         return result;
-    }
-
-    @Transactional(readOnly = true)
-    public ScanResponse getScan(Long id) {
-        return scans.findById(id)
-                .map(ScanResponse::from)
-                .orElseThrow(() -> new NotFoundException("Scan " + id + " not found"));
     }
 
     private Dependency upsertDependency(Application app, ParsedFinding pf) {
