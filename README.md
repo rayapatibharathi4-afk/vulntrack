@@ -6,7 +6,7 @@
 
 VulnTrack is a backend service that ingests dependency vulnerability scan reports from CI pipelines, enriches each CVE with data from the NVD API, tracks every finding against a severity-based SLA, and exposes REST APIs for listing, assigning and closing findings. Scans are processed asynchronously through Kafka, so a slow NVD API or a large report never blocks the CI pipeline.
 
-**Status:** work in progress. Milestones 0–4 are done: data model, scan ingestion, Findings API, NVD enrichment with a circuit breaker, and asynchronous Kafka processing with retries and a dead-letter topic. Milestone 5 is in progress: API-key authentication on write endpoints, correlation IDs, and Prometheus metrics. Read access, Testcontainers and the remaining security work come next. See [Roadmap](#roadmap).
+**Status:** work in progress. Milestones 0–4 are done: data model, scan ingestion, Findings API, NVD enrichment with a circuit breaker, and asynchronous Kafka processing with retries and a dead-letter topic. Milestone 5 is in progress: API-key authentication on write endpoints, correlation IDs, and Prometheus metrics. Read access and the remaining security work come next. See [Roadmap](#roadmap).
 
 ---
 
@@ -54,7 +54,7 @@ One Spring Boot deployable with two logical parts (REST APIs + Kafka consumer). 
 | Messaging | Kafka 4.1 (KRaft), Spring for Apache Kafka, dead-letter topic |
 | Resilience / cache | Resilience4j (retry, circuit breaker), Caffeine |
 | Security | Spring Security, API key on write endpoints (`X-API-Key`) |
-| Tests | JUnit 5, AssertJ, Mockito, MockMvc, `@EmbeddedKafka`; Testcontainers — *planned* |
+| Tests | JUnit 5, AssertJ, Mockito, MockMvc; Testcontainers (PostgreSQL 16, Kafka 4.1) |
 | Build | Maven Wrapper, Docker Compose |
 
 ## Getting started
@@ -75,7 +75,7 @@ export VULNTRACK_API_KEY=choose-a-long-random-value     # PowerShell: $env:VULNT
 curl http://localhost:8080/actuator/health
 ```
 
-**Run the tests** (PostgreSQL must be running for the full-context test):
+**Run the tests** (Docker must be running: the tests start their own PostgreSQL and Kafka containers, so the local compose stack is not needed):
 
 ```bash
 ./mvnw clean test
@@ -186,7 +186,7 @@ scripts/                          Local development helpers (seed data)
   - [ ] Read access and roles (a read key or a second role for risk acceptance)
   - [x] Actuator and Micrometer metrics at `/actuator/prometheus`: Kafka consumer lag, NVD circuit breaker state, scans processed
   - [x] Correlation ID from request to log lines and Kafka message (`X-Correlation-Id`)
-  - [ ] Testcontainers (PostgreSQL and Kafka) to replace the shared local database in tests
+  - [x] Testcontainers (PostgreSQL 16 and Kafka 4.1) for all integration tests; CI no longer needs service containers
 - [ ] **M6 – Ship it:** ~~GitHub Actions build + tests~~ ✅ done · multi-stage Dockerfile · Dependency-Check on this repo
 
 ## Author

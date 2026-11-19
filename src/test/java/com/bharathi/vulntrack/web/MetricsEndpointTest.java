@@ -9,23 +9,23 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.micrometer.metrics.test.autoconfigure.AutoConfigureMetrics;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.kafka.test.context.EmbeddedKafka;
+import org.springframework.context.annotation.Import;
 import org.springframework.test.web.servlet.MockMvc;
 
-import com.bharathi.vulntrack.ingest.KafkaTopics;
+import com.bharathi.vulntrack.KafkaContainerConfig;
+import com.bharathi.vulntrack.PostgresContainerConfig;
 
 /**
  * The Prometheus endpoint must show the three things we want to watch: the NVD circuit breaker,
  * scans processed, and Kafka consumer metrics (the lag is among them).
  */
 @SpringBootTest(properties = {
-        "spring.kafka.bootstrap-servers=${spring.embedded.kafka.brokers}",
         "vulntrack.enrichment.enabled=false",
         "vulntrack.scan-consumer.enabled=true"
 })
 @AutoConfigureMockMvc
 @AutoConfigureMetrics // Boot turns metrics export off in tests unless this is present
-@EmbeddedKafka(partitions = 3, topics = {KafkaTopics.SCAN_SUBMITTED, KafkaTopics.SCAN_SUBMITTED_DLT})
+@Import({PostgresContainerConfig.class, KafkaContainerConfig.class})
 class MetricsEndpointTest {
 
     @Autowired

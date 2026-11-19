@@ -40,6 +40,29 @@
 **Known gaps (for later steps)**
 - Duplicate-delivery test not written yet — Step 4.
 
+## Milestone 5 — Step 4: Testcontainers for PostgreSQL and Kafka
+
+**What changed**
+- `PostgresContainerConfig` (PostgreSQL 16) and `KafkaContainerConfig` (Apache Kafka 4.1.0): test-only
+  `@ServiceConnection` beans. Boot points the datasource and Kafka at the containers. Tests import only what they need.
+- Tests that touched the database (`VulntrackApplicationTests`, `ScanIngestionServiceTest`, `ScanEventPublisherTest`)
+  import the Postgres config. `ScanDeadLetterKafkaTest` and `MetricsEndpointTest` import both.
+- `@EmbeddedKafka` is gone. The dead-letter test reads from the container with a plain `KafkaConsumer`.
+- `.github/workflows/ci.yml`: the Postgres `services:` block is removed. Ubuntu runners include Docker.
+- Dependencies (test scope, versions from Boot's Testcontainers 2.0.5 BOM): `spring-boot-testcontainers`,
+  `testcontainers-postgresql`, `testcontainers-kafka`.
+
+**Errors hit**
+- The dead-letter test timed out. The test read `spring.kafka.bootstrap-servers` with `@Value`, which gave the local
+  compose broker (`localhost:9092`). The producer and listeners were on the container. Two cluster IDs in the log
+  showed it. Root cause: `@ServiceConnection` supplies a `KafkaConnectionDetails` bean. It does not change the raw
+  property or the `KafkaProperties` bean. Fix: inject `KafkaConnectionDetails`.
+
+**Verification**
+- `.\mvnw.cmd clean verify`: exit 0, 46 tests green.
+- The test logs show every JDBC URL on a random container port (not 5432), and one Kafka cluster ID for the whole run.
+- Live check: **not run.** The old app is still on port 8080.
+
 ## Milestone 5 — Step 3: metrics for Kafka lag, the NVD circuit breaker and scans processed
 
 **What changed**

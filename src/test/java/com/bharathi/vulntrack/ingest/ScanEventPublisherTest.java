@@ -18,11 +18,13 @@ import org.slf4j.MDC;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.context.annotation.Import;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.support.SendResult;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import com.bharathi.vulntrack.PostgresContainerConfig;
 import com.bharathi.vulntrack.config.CorrelationId;
 
 /**
@@ -34,6 +36,7 @@ import com.bharathi.vulntrack.config.CorrelationId;
         "vulntrack.scan-consumer.enabled=false",
         "spring.kafka.admin.auto-create=false"
 })
+@Import(PostgresContainerConfig.class)
 class ScanEventPublisherTest {
 
     @MockitoBean

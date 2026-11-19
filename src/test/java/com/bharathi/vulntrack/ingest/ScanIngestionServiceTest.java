@@ -12,6 +12,9 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.annotation.Import;
+
+import com.bharathi.vulntrack.PostgresContainerConfig;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.bharathi.vulntrack.domain.Application;
@@ -27,6 +30,7 @@ import com.bharathi.vulntrack.service.NotFoundException;
         "vulntrack.scan-consumer.enabled=false",
         "spring.kafka.admin.auto-create=false"
 })
+@Import(PostgresContainerConfig.class)
 @Transactional
 class ScanIngestionServiceTest {
 
