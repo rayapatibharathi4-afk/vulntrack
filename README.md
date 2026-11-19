@@ -4,9 +4,11 @@
 
 > Turns CI vulnerability scan reports into tracked, deadline-driven findings.
 
-VulnTrack is a backend service that ingests dependency vulnerability scan reports from CI pipelines, enriches each CVE with data from the NVD API, tracks every finding against a severity-based SLA, and exposes REST APIs for listing, assigning and closing findings. Scans are processed asynchronously through Kafka, so a slow NVD API or a large report never blocks the CI pipeline.
+VulnTrack is a backend service that ingests dependency vulnerability scan reports from CI pipelines, enriches each CVE with data from the NVD API, tracks every finding against a severity-based SLA, and exposes REST APIs for listing findings and checking scan status. Scans are processed asynchronously through Kafka, so a slow NVD API or a large report never blocks the CI pipeline.
 
-**Status:** work in progress. Milestones 0–4 are done: data model, scan ingestion, Findings API, NVD enrichment with a circuit breaker, and asynchronous Kafka processing with retries and a dead-letter topic. Milestone 5 is in progress: API-key authentication on write endpoints, correlation IDs, and Prometheus metrics. The next security item is a role for risk acceptance. See [Roadmap](#roadmap).
+**Status:** Milestones 0–4 and 6 are complete. Milestone 5 (security and observability) is nearly done; one item is open: a role for risk acceptance. See [Roadmap](#roadmap).
+
+**Not built yet:** assigning and closing findings (the findings API is read-only), and risk acceptance.
 
 ---
 
@@ -32,14 +34,16 @@ VulnTrack answers that:
 
 ```mermaid
 flowchart LR
-    CI[CI pipeline] -->|POST /api/scans| API[Scan API]
-    API -->|save raw scan| DB[(PostgreSQL)]
-    API -->|publish| K[[Kafka: scan-submitted]]
-    K -->|consume| P[Finding processor]
-    P -->|upsert| DB
-    P -->|fetch CVE details| NVD[NVD API]
-    U[Security team] -->|GET /api/findings| F[Findings API]
-    F -->|query| DB
+    CI[CI pipeline] -->|POST /api/scans, X-API-Key| API[REST API]
+    API -->|save as RECEIVED| DB[(PostgreSQL)]
+    API -->|publish after commit| K[[Kafka: scan-submitted]]
+    K -->|consume, retry 3 times| P[Scan processor]
+    P -->|upsert findings| DB
+    P -->|fail after retries| D[[Kafka: scan-submitted.DLT]]
+    P -->|CVE details, circuit breaker| NVD[NVD API]
+    U[Dashboards] -->|GET /api/findings, read key| API
+    API -->|query| DB
+    PR[Prometheus] -->|scrape /actuator/prometheus| API
 ```
 
 One Spring Boot deployable with two logical parts (REST APIs + Kafka consumer). Kafka already decouples the slow work, so splitting into microservices would add cost without benefit at this scale.
@@ -53,9 +57,10 @@ One Spring Boot deployable with two logical parts (REST APIs + Kafka consumer). 
 | Database | PostgreSQL 16, Flyway migrations |
 | Messaging | Kafka 4.1 (KRaft), Spring for Apache Kafka, dead-letter topic |
 | Resilience / cache | Resilience4j (retry, circuit breaker), Caffeine |
-| Security | Spring Security, API key on write endpoints (`X-API-Key`) |
+| Security | Spring Security, API keys with two roles (`X-API-Key`: INGEST, VIEWER) |
+| Observability | Actuator, Micrometer, Prometheus endpoint, correlation IDs in logs and Kafka headers |
 | Tests | JUnit 5, AssertJ, Mockito, MockMvc; Testcontainers (PostgreSQL 16, Kafka 4.1) |
-| Build | Maven Wrapper, Docker Compose |
+| Build and delivery | Maven Wrapper, multi-stage Dockerfile (non-root), Docker Compose, GitHub Actions, OWASP Dependency-Check |
 
 ## Getting started
 
@@ -67,7 +72,7 @@ docker compose up -d
 docker compose ps            # wait for (healthy)
 
 # 2. Run the app (Flyway creates the schema on startup)
-#    Set the API key that write requests must send. Without it, all writes return 401.
+#    Every API call needs a key. Without VULNTRACK_API_KEY the app refuses all writes.
 export VULNTRACK_API_KEY=choose-a-long-random-value     # PowerShell: $env:VULNTRACK_API_KEY = "..."
 ./mvnw spring-boot:run       # Windows: .\mvnw spring-boot:run
 
@@ -108,12 +113,30 @@ docker exec -i vulntrack-postgres psql -U vulntrack -d vulntrack < scripts/dev-s
 
 | Method | Endpoint | Description |
 |---|---|---|
-| `POST` | `/api/applications` | Register an application. `201 Created` + `Location` header. Needs `X-API-Key` |
-| `GET` | `/api/applications` | List applications (paged, sorted by name) |
-| `GET` | `/api/findings` | List findings with optional filters (paged, most urgent first) |
-| `GET` | `/actuator/health` | Health, including database, liveness and readiness |
-| `POST` | `/api/scans?application={name}` | Submit an OWASP Dependency-Check JSON report. `202 Accepted` + `Location` header, status `RECEIVED`. Processing happens asynchronously. Needs `X-API-Key` |
-| `GET` | `/api/scans/{id}` | Scan status (`RECEIVED`, `PROCESSING`, `COMPLETED`, `FAILED`) and timestamps |
+| `POST` | `/api/applications` | Register an application. `201 Created` + `Location` header. Ingest key |
+| `GET` | `/api/applications` | List applications (paged, sorted by name). Any key |
+| `GET` | `/api/findings` | List findings with optional filters (paged, most urgent first). Any key |
+| `POST` | `/api/scans?application={name}` | Submit an OWASP Dependency-Check JSON report. `202 Accepted` + `Location` header, status `RECEIVED`. Processing is asynchronous. Ingest key |
+| `GET` | `/api/scans/{id}` | Scan status (`RECEIVED`, `PROCESSING`, `COMPLETED`, `FAILED`) and timestamps. Any key |
+| `GET` | `/actuator/health` | Health, including the database. Open |
+| `GET` | `/actuator/prometheus` | Metrics for Prometheus. Any key |
+
+**Examples** (PowerShell and bash use the same `curl` syntax; the key is in `VULNTRACK_API_KEY`):
+
+```bash
+# Submit a scan: 202 Accepted, status RECEIVED
+curl -i -X POST "http://localhost:8080/api/scans?application=payments-service" \
+     -H "Content-Type: application/json" -H "X-API-Key: $VULNTRACK_API_KEY" \
+     --data-binary @dependency-check-report.json
+
+# Check it later: COMPLETED (or FAILED)
+curl http://localhost:8080/api/scans/42 -H "X-API-Key: $VULNTRACK_API_KEY"
+
+# Every overdue critical finding, most urgent first
+curl "http://localhost:8080/api/findings?severity=CRITICAL&overdue=true" -H "X-API-Key: $VULNTRACK_API_KEY"
+```
+
+A correlation ID travels with each request. Send `X-Correlation-Id: <id>` to choose it; the response echoes it and every log line for that request shows it.
 
 **Authentication.** Every API call sends an API key in the `X-API-Key` header:
 
@@ -148,8 +171,11 @@ GET /api/findings?status=OPEN&severity=CRITICAL&applicationId=1&overdue=true&pag
 | Situation | Status |
 |---|---|
 | Validation failure (with per-field `errors`) | 400 |
-| Malformed JSON or invalid enum value | 400 |
-| Unknown URL | 404 |
+| Malformed JSON, invalid enum value, or a report that is not valid Dependency-Check JSON | 400 |
+| No API key, or an unknown key | 401 |
+| Valid key without the needed role | 403 |
+| Unknown URL (with a valid key; without one, the response is 401) | 404 |
+| Application or scan does not exist | 404 |
 | Duplicate (application check or database constraint) | 409 |
 | Unexpected error (details logged, never returned) | 500 |
 
@@ -178,7 +204,12 @@ src/main/java/com/bharathi/vulntrack
 └── web/          Controllers, global error handler, DTOs (records)
 
 src/main/resources/db/migration   Flyway SQL migrations
+src/test/                         Unit, MockMvc and Testcontainers tests (no internet access)
 scripts/                          Local development helpers (seed data)
+docs/BUILD_LOG.md                 Step-by-step log: what changed, errors and their causes
+docs/INTERVIEW_NOTES.md           Talking points per milestone
+Dockerfile, docker-compose.yml    Container image and the full local stack
+.github/workflows/ci.yml          Build and test on every change; dependency scan on main and weekly
 ```
 
 ## Design decisions
@@ -190,6 +221,21 @@ scripts/                          Local development helpers (seed data)
 5. **Testable time.** "Now" comes from an injected `Clock`, so overdue logic is tested with fixed dates.
 6. **SQL over NoSQL.** Relational data, uniqueness rules and reporting queries with joins; JSONB keeps the raw report without a second database.
 7. **Spring Boot 4.** Boot 3.x reached end of open-source support in June 2026; a vulnerability tracker should not run on an unpatched framework.
+8. **Scans are accepted fast and processed later.** `POST` stores the report and returns `202` in milliseconds. The Kafka message is sent only after the commit, so the consumer never sees a scan that does not exist.
+9. **Failures are classified.** Bad input (a non-numeric message, an unparseable report) is never retried. Transient errors are retried three times with backoff, then the message goes to a dead-letter topic and the scan is marked `FAILED`, so nothing blocks the partition.
+10. **Two Kafka listeners.** Clients on the host use `localhost:9092`; containers on the compose network use `kafka:29092`. A broker advertises one address per listener, so both are needed.
+11. **API keys are hashed before comparison and fail closed.** Keys come from environment variables only. An unset key matches nothing. Two keys with separate roles: CI writes, dashboards only read.
+12. **Least privilege in the container.** The runtime image has a JRE, the jar and an unprivileged user, and no build tools or secrets.
+
+## Trade-offs and known gaps
+
+- **Dual write, not an outbox.** The scan is saved, then the message is sent. If the process crashes between the two, the scan stays `RECEIVED` and is never processed. A transactional outbox would close this, at the cost of a table and a relay. Not built yet.
+- **At-least-once delivery.** Duplicates are possible. They are handled by the status check (a finished scan is skipped) and by the unique constraint on findings. This is simpler than exactly-once, which Kafka only supports with transactions end to end.
+- **Static API keys.** Keys are set through environment variables. There is no rotation, no per-application key, and no audit of who used which key. Acceptable for a small team; a real deployment would move keys to a secret store and add per-client identity.
+- **Metrics are only as protected as the keys.** `/actuator/prometheus` needs any valid key. Prometheus should scrape from a private network.
+- **Dead-letter messages are not replayed automatically.** An engineer inspects `scan-submitted.DLT`, fixes the cause, and re-submits. No replay tool yet.
+- **Dependency scan is slow.** The OWASP NVD database is large. It runs on `main` and weekly, not on every pull request, so a vulnerable change can merge before the scan catches it.
+- **Single instance.** Scheduled CVE enrichment and the consumer assume one or a few instances. Running many would need coordination for the scheduler; partitions already spread the consumers.
 
 ## Roadmap
 
@@ -205,7 +251,7 @@ scripts/                          Local development helpers (seed data)
   - [x] Actuator and Micrometer metrics at `/actuator/prometheus`: Kafka consumer lag, NVD circuit breaker state, scans processed
   - [x] Correlation ID from request to log lines and Kafka message (`X-Correlation-Id`)
   - [x] Testcontainers (PostgreSQL 16 and Kafka 4.1) for all integration tests; CI no longer needs service containers
-- [ ] **M6 – Ship it:** ~~GitHub Actions build + tests~~ ✅ done · ~~multi-stage Dockerfile~~ ✅ done · ~~OWASP Dependency-Check in CI (fails on CVSS 7+)~~ ✅ done · final README and interview notes
+- [x] **M6 – Ship it:** GitHub Actions build and tests, multi-stage Dockerfile, OWASP Dependency-Check in CI (fails on CVSS 7+), final README and interview notes
 
 ## Author
 
