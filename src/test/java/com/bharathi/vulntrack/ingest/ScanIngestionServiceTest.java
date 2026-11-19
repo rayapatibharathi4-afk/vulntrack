@@ -21,7 +21,11 @@ import com.bharathi.vulntrack.repository.ApplicationRepository;
 import com.bharathi.vulntrack.repository.FindingRepository;
 import com.bharathi.vulntrack.service.NotFoundException;
 
-@SpringBootTest(properties = "vulntrack.enrichment.enabled=false")
+@SpringBootTest(properties = {
+        "vulntrack.enrichment.enabled=false",
+        "vulntrack.scan-consumer.enabled=false",
+        "spring.kafka.admin.auto-create=false"
+})
 @Transactional
 class ScanIngestionServiceTest {
 
