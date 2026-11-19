@@ -34,6 +34,7 @@ import com.bharathi.vulntrack.repository.FindingRepository;
         "vulntrack.scan-consumer.enabled=false",
         "vulntrack.outbox.enabled=false",
         "vulntrack.risk-expiry.initial-delay=1h",
+        "vulntrack.outbox-cleanup.enabled=false",
         "spring.kafka.admin.auto-create=false"
 })
 @Import(PostgresContainerConfig.class)

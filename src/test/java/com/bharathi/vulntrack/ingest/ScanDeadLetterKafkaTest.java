@@ -34,7 +34,8 @@ import com.bharathi.vulntrack.PostgresContainerConfig;
         "vulntrack.enrichment.enabled=false",
         "vulntrack.scan-consumer.enabled=true",
         "vulntrack.outbox.enabled=false",
-        "vulntrack.risk-expiry.enabled=false"
+        "vulntrack.risk-expiry.enabled=false",
+        "vulntrack.outbox-cleanup.enabled=false"
 })
 @Import({PostgresContainerConfig.class, KafkaContainerConfig.class})
 class ScanDeadLetterKafkaTest {

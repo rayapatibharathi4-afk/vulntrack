@@ -31,6 +31,7 @@ import com.bharathi.vulntrack.service.NotFoundException;
         "vulntrack.scan-consumer.enabled=false",
         "vulntrack.outbox.enabled=false",
         "vulntrack.risk-expiry.enabled=false",
+        "vulntrack.outbox-cleanup.enabled=false",
         "spring.kafka.admin.auto-create=false"
 })
 @Import(PostgresContainerConfig.class)

@@ -24,6 +24,7 @@ import com.bharathi.vulntrack.PostgresContainerConfig;
         "vulntrack.scan-consumer.enabled=true",
         "vulntrack.outbox.enabled=false",
         "vulntrack.risk-expiry.enabled=false",
+        "vulntrack.outbox-cleanup.enabled=false",
         "vulntrack.security.read-api-key=test-only-read-key" // dummy, test only
 })
 @AutoConfigureMockMvc
