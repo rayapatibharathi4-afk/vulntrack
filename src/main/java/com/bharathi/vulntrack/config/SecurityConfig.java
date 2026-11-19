@@ -51,6 +51,8 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/**").hasRole("INGEST")
                         .requestMatchers(HttpMethod.GET, "/api/**").hasRole("VIEWER")
                         .requestMatchers("/actuator/health/**", "/actuator/info", "/error").permitAll()
+                        // Metrics are read-only data: the risk key (which can only accept risks) must not see them
+                        .requestMatchers("/actuator/prometheus", "/actuator/metrics/**").hasRole("VIEWER")
                         .anyRequest().authenticated())
                 .exceptionHandling(errors -> errors
                         // No valid key: 401

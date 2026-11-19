@@ -40,6 +40,12 @@
 **Known gaps (for later steps)**
 - Duplicate-delivery test not written yet — Step 4.
 
+## Milestone 5 — Step 8: metrics need the read role
+
+**What changed:** `/actuator/prometheus` and `/actuator/metrics/**` require `ROLE_VIEWER`. The risk key (which has only
+`ROLE_RISK`) now gets `403`. Before this, any valid key could read metrics. Test added: `theRiskKeyCannotReadMetrics`.
+**Verification:** `clean verify` exit 0, 69 tests green.
+
 ## Review pass (before the final live checks)
 
 **Checked with commands:** `Instant.now()` and `currentTimeMillis` in main code; file names against class names; tracked

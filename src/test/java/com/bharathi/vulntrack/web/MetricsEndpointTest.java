@@ -25,7 +25,8 @@ import com.bharathi.vulntrack.PostgresContainerConfig;
         "vulntrack.outbox.enabled=false",
         "vulntrack.risk-expiry.enabled=false",
         "vulntrack.outbox-cleanup.enabled=false",
-        "vulntrack.security.read-api-key=test-only-read-key" // dummy, test only
+        "vulntrack.security.read-api-key=test-only-read-key", // dummy, test only
+        "vulntrack.security.risk-api-key=test-only-risk-key" // dummy, test only
 })
 @AutoConfigureMockMvc
 @AutoConfigureMetrics // Boot turns metrics export off in tests unless this is present
@@ -45,5 +46,11 @@ class MetricsEndpointTest {
                 .contains("resilience4j_circuitbreaker_state")
                 .contains("vulntrack_scans_processed_total")
                 .contains("kafka_consumer_fetch_manager_records_lag");
+    }
+
+    @Test
+    void theRiskKeyCannotReadMetrics() throws Exception {
+        mockMvc.perform(get("/actuator/prometheus").header("X-API-Key", "test-only-risk-key"))
+                .andExpect(status().isForbidden());
     }
 }

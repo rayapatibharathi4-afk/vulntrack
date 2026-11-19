@@ -121,7 +121,7 @@ docker exec -i vulntrack-postgres psql -U vulntrack -d vulntrack < scripts/dev-s
 | `GET` | `/api/scans/{id}` | Scan status (`RECEIVED`, `PROCESSING`, `COMPLETED`, `FAILED`) and timestamps. Any key |
 | `POST` | `/api/findings/{id}/accept-risk` | Accept the risk of an open finding until a date. Body: `reason`, `acceptedBy`, `expiresAt`. `200` with the finding. `409` if the finding is not open. Risk key |
 | `GET` | `/actuator/health` | Health, including the database. Open |
-| `GET` | `/actuator/prometheus` | Metrics for Prometheus. Any key |
+| `GET` | `/actuator/prometheus` | Metrics for Prometheus. Read or ingest key (the risk key gets `403`) |
 
 **Examples** (PowerShell and bash use the same `curl` syntax; the key is in `VULNTRACK_API_KEY`):
 
