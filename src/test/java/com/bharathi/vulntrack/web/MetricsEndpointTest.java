@@ -21,7 +21,8 @@ import com.bharathi.vulntrack.PostgresContainerConfig;
  */
 @SpringBootTest(properties = {
         "vulntrack.enrichment.enabled=false",
-        "vulntrack.scan-consumer.enabled=true"
+        "vulntrack.scan-consumer.enabled=true",
+        "vulntrack.security.read-api-key=test-only-read-key" // dummy, test only
 })
 @AutoConfigureMockMvc
 @AutoConfigureMetrics // Boot turns metrics export off in tests unless this is present
@@ -33,7 +34,7 @@ class MetricsEndpointTest {
 
     @Test
     void prometheusEndpointExposesCircuitBreakerScanAndKafkaMetrics() throws Exception {
-        String body = mockMvc.perform(get("/actuator/prometheus"))
+        String body = mockMvc.perform(get("/actuator/prometheus").header("X-API-Key", "test-only-read-key"))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
 

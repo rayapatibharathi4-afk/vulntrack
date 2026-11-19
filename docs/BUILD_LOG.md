@@ -40,6 +40,29 @@
 **Known gaps (for later steps)**
 - Duplicate-delivery test not written yet — Step 4.
 
+## Milestone 5 — Step 5: read access and roles
+
+**What changed**
+- Two keys. `VULNTRACK_API_KEY` grants ROLE_INGEST and ROLE_VIEWER. `VULNTRACK_READ_API_KEY` grants ROLE_VIEWER only.
+- Rules: POST /api/** needs INGEST. GET /api/** needs VIEWER. `/actuator/health/**`, `/actuator/info` and `/error` are open.
+  Everything else (including `/actuator/prometheus`) needs any valid key.
+- Missing or unknown key: 401. Valid key without the role: 403. Both are Problem Details (`accessDeniedHandler` added).
+- The filter compares hashes of both keys in constant time. An unset key matches nothing.
+
+**Behaviour change**
+- An unknown URL without a key now returns 401, not 404. The `anyRequest().authenticated()` rule applies before
+  the 404 handler. With a valid key the 404 still happens. Accepted for now; a 404 for anonymous callers would
+  need a rule for unmapped paths.
+
+**Decision**
+- No separate admin role yet. The plan's "role for risk acceptance" needs an endpoint that does not exist, so
+  it's left for when that endpoint is built. Two roles (INGEST, VIEWER) are enough for CI and dashboards.
+
+**Verification**
+- `.\mvnw.cmd clean verify`: exit 0, 50 tests green (+4: read with read key, no key on read, read-only key forbidden
+  on write, ingest key can read).
+- Live check: **not run.** Old app still on port 8080.
+
 ## Milestone 5 — Step 4: Testcontainers for PostgreSQL and Kafka
 
 **What changed**
