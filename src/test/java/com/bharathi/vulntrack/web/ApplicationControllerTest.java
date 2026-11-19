@@ -8,6 +8,8 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
+import org.springframework.context.annotation.Import;
+import org.springframework.test.context.TestPropertySource;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
@@ -16,12 +18,19 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.bharathi.vulntrack.config.ApiKeyAuthFilter;
+import com.bharathi.vulntrack.config.SecurityConfig;
 import com.bharathi.vulntrack.service.ApplicationService;
 import com.bharathi.vulntrack.service.ConflictException;
 import com.bharathi.vulntrack.web.dto.ApplicationResponse;
 
+// A dummy key for this test only, not a real secret
 @WebMvcTest(ApplicationController.class)
+@Import(SecurityConfig.class)
+@TestPropertySource(properties = "vulntrack.security.api-key=test-only-key")
 class ApplicationControllerTest {
+
+    private static final String KEY = "test-only-key";
 
     @Autowired
     private MockMvc mockMvc;
@@ -36,6 +45,7 @@ class ApplicationControllerTest {
                 Instant.parse("2026-11-11T10:00:00Z")));
 
         mockMvc.perform(post("/api/applications")
+                        .header(ApiKeyAuthFilter.HEADER, KEY)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"name": "payments-service", "ownerTeam": "payments"}
@@ -49,6 +59,7 @@ class ApplicationControllerTest {
     @Test
     void createRejectsInvalidNameWithoutCallingService() throws Exception {
         mockMvc.perform(post("/api/applications")
+                        .header(ApiKeyAuthFilter.HEADER, KEY)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"name": "Payments Service"}
@@ -66,11 +77,38 @@ class ApplicationControllerTest {
                 .thenThrow(new ConflictException("Application 'payments-service' already exists"));
 
         mockMvc.perform(post("/api/applications")
+                        .header(ApiKeyAuthFilter.HEADER, KEY)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"name": "payments-service"}
                                 """))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.detail").value("Application 'payments-service' already exists"));
+    }
+
+    @Test
+    void writeWithoutKeyIsRejectedAsProblemDetailsAndNeverReachesTheService() throws Exception {
+        mockMvc.perform(post("/api/applications")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"name": "payments-service"}
+                                """))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.title").value("Unauthorized"));
+
+        verifyNoInteractions(service);
+    }
+
+    @Test
+    void writeWithWrongKeyIsRejected() throws Exception {
+        mockMvc.perform(post("/api/applications")
+                        .header(ApiKeyAuthFilter.HEADER, "not-the-key")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"name": "payments-service"}
+                                """))
+                .andExpect(status().isUnauthorized());
+
+        verifyNoInteractions(service);
     }
 }

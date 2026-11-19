@@ -40,6 +40,31 @@
 **Known gaps (for later steps)**
 - Duplicate-delivery test not written yet — Step 4.
 
+## Milestone 5 — Step 1: API key on write endpoints
+
+**What changed**
+- `SecurityConfig`: `POST /api/**` needs the `ROLE_INGEST` role. Reads stay open. CSRF, HTTP Basic and form login are
+  off (stateless API, no cookies). Failures return `401` as RFC 9457 Problem Details.
+- `ApiKeyAuthFilter`: reads the `X-API-Key` header and grants `ROLE_INGEST` when it matches. It compares SHA-256
+  hashes with `MessageDigest.isEqual`, so the comparison time does not depend on the key's contents.
+- The key comes from `VULNTRACK_API_KEY` (`vulntrack.security.api-key=${VULNTRACK_API_KEY:}`). If it is empty,
+  nothing matches, so writes fail closed.
+- The filter is not a `@Component`, so Boot does not also register it as a servlet filter.
+
+**Errors hit**
+- None in the build. The Spring Security starters were not in the local cache, so the first build downloaded them.
+
+**Verification**
+- `.\mvnw.cmd clean verify`: exit 0, 41 tests green (39 before, +2 for the missing-key and wrong-key paths).
+- Live check: **not run.** The old Step 2 app is still on port 8080 and doesn't have security. Pending the restart.
+
+**Alternatives considered**
+- JWT: more machinery (signing keys, expiry, rotation). The plan allows either; an API key is enough for CI
+  callers, and it is the simpler thing to defend in an interview. Roles can be added to the key later.
+- Keys in the database (hashed, per application): better for rotation, but it needs a migration and an admin
+  flow. Left for later.
+- Testing with a dummy key in `@TestPropertySource` is not a secret. It only exists in the test source.
+
 ## Milestone 4 — Step 4: tests for idempotency, publish-after-commit, dead-letter path
 
 **Bug found by the new test (fixed in this step, introduced in Step 3)**

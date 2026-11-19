@@ -94,12 +94,14 @@ docker exec -i vulntrack-postgres psql -U vulntrack -d vulntrack < scripts/dev-s
 
 | Method | Endpoint | Description |
 |---|---|---|
-| `POST` | `/api/applications` | Register an application. `201 Created` + `Location` header |
+| `POST` | `/api/applications` | Register an application. `201 Created` + `Location` header. Needs `X-API-Key` |
 | `GET` | `/api/applications` | List applications (paged, sorted by name) |
 | `GET` | `/api/findings` | List findings with optional filters (paged, most urgent first) |
 | `GET` | `/actuator/health` | Health, including database, liveness and readiness |
-| `POST` | `/api/scans?application={name}` | Submit an OWASP Dependency-Check JSON report. `202 Accepted` + `Location` header, status `RECEIVED`. Processing happens asynchronously |
+| `POST` | `/api/scans?application={name}` | Submit an OWASP Dependency-Check JSON report. `202 Accepted` + `Location` header, status `RECEIVED`. Processing happens asynchronously. Needs `X-API-Key` |
 | `GET` | `/api/scans/{id}` | Scan status (`RECEIVED`, `PROCESSING`, `COMPLETED`, `FAILED`) and timestamps |
+
+**Authentication.** Writes need an API key in the `X-API-Key` header. Set the key with the `VULNTRACK_API_KEY` environment variable. If it is not set, every write returns `401`. Reads are open for now. A missing or wrong key returns `401` as Problem Details.
 
 **Async processing.** A submitted scan is stored as `RECEIVED` and announced on the `scan-submitted` topic after the database commit. A consumer processes it and sets `COMPLETED`. Failed messages are retried three times with exponential backoff (1s, 2s, 4s). A report that cannot be parsed is not retried. When retries run out, the scan is marked `FAILED` and the message moves to `scan-submitted.DLT`.
 
