@@ -75,6 +75,16 @@ export VULNTRACK_API_KEY=choose-a-long-random-value     # PowerShell: $env:VULNT
 curl http://localhost:8080/actuator/health
 ```
 
+**Run everything in containers** (no local JDK needed):
+
+```bash
+export VULNTRACK_API_KEY=choose-a-long-random-value   # PowerShell: $env:VULNTRACK_API_KEY = "..."
+docker compose up -d --build                          # PostgreSQL, Kafka and the app on :8080
+curl http://localhost:8080/actuator/health
+```
+
+The app image is built in two stages (Maven build, then a JRE image) and runs as a non-root user.
+
 **Run the tests** (Docker must be running: the tests start their own PostgreSQL and Kafka containers, so the local compose stack is not needed):
 
 ```bash

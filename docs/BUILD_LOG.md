@@ -40,6 +40,34 @@
 **Known gaps (for later steps)**
 - Duplicate-delivery test not written yet — Step 4.
 
+## Milestone 6 — Step 1: container image and the app in compose
+
+**What changed**
+- `Dockerfile`: two stages. A JDK image runs `mvnw package -DskipTests` (tests run in CI). A JRE image gets only the
+  jar, a fixed system user (`vulntrack`, uid 999) and no login shell. Dependencies are fetched in a separate layer so
+  code changes rebuild quickly. No secret is in the image.
+- `.dockerignore`: keeps `.git`, `docs`, `target` and `.env` out of the build context.
+- `docker-compose.yml`:
+  - Kafka gets an `INTERNAL` listener (`kafka:29092`) for containers on the compose network. The `PLAINTEXT` listener
+    (`localhost:9092`) is unchanged for the host.
+  - New `app` service on `8080`, with its database and Kafka addresses set to the compose service names.
+  - Keys come from the environment. `VULNTRACK_API_KEY` is optional at compose level: an empty key refuses writes.
+    A required variable would also block `docker compose up kafka` for anyone who only needs the broker.
+
+**Errors hit**
+- `${VULNTRACK_API_KEY:?...}` made every compose command fail when the key was unset, even `up kafka`. Changed to
+  `${VULNTRACK_API_KEY:-}`.
+
+**Verification**
+- `docker build -t vulntrack:dev .` succeeded. The image runs as uid 999.
+- Recreated only the Kafka container with the new listeners (healthy).
+- Started the image on the compose network on port 8081, with the consumer disabled so it does not compete with the
+  process on 8080. Health: `UP` (reached Postgres). `POST /api/scans` without a key: `401`. With the key: `202`, and the
+  log shows `Published scan 199 ... partition 1 offset 0` over the internal listener.
+- Container removed afterwards.
+- Not done: the container's consumer and full scan processing, and the live duplicate and poison demo (the old
+  Step 2 process on 8080 is still running, which is why the checks were run on 8081 with the consumer off).
+
 ## Milestone 5 — Step 5: read access and roles
 
 **What changed**

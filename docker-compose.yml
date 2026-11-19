@@ -24,10 +24,12 @@ services:
     environment:
       KAFKA_NODE_ID: 1
       KAFKA_PROCESS_ROLES: broker,controller
-      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+      # PLAINTEXT: for the host (localhost:9092). INTERNAL: for containers on this compose network (kafka:29092).
+      KAFKA_LISTENERS: PLAINTEXT://:9092,INTERNAL://:29092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092,INTERNAL://kafka:29092
       KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,INTERNAL:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
       KAFKA_CONTROLLER_QUORUM_VOTERS: 1@localhost:9093
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
@@ -38,6 +40,26 @@ services:
       interval: 10s
       timeout: 10s
       retries: 10
+
+  # The application itself, for a one-command run of the whole stack.
+  # Pass VULNTRACK_API_KEY in the environment (or a .env file). The compose file contains no secret.
+  app:
+    build: .
+    container_name: vulntrack-app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/vulntrack
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      # Empty means writes are refused (the app fails closed), so the stack still starts without it
+      VULNTRACK_API_KEY: ${VULNTRACK_API_KEY:-}
+      VULNTRACK_READ_API_KEY: ${VULNTRACK_READ_API_KEY:-}
+      NVD_API_KEY: ${NVD_API_KEY:-}
+    ports:
+      - "8080:8080"
 
 volumes:
   pgdata:

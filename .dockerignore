@@ -1,0 +1,11 @@
+# Keep the build context small and keep local files and secrets out of the image
+.git
+.github
+.idea
+.vscode
+docs
+target
+**/*.log
+.env
+*.env
+**/.claude
