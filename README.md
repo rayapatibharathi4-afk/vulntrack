@@ -6,7 +6,7 @@
 
 VulnTrack is a backend service that ingests dependency vulnerability scan reports from CI pipelines, enriches each CVE with data from the NVD API, tracks every finding against a severity-based SLA, and exposes REST APIs for listing, assigning and closing findings. Scans are processed asynchronously through Kafka, so a slow NVD API or a large report never blocks the CI pipeline.
 
-**Status:** work in progress. Milestones 0–4 are done: data model, scan ingestion, Findings API, NVD enrichment with a circuit breaker, and asynchronous Kafka processing with retries and a dead-letter topic. Milestone 5 has started: API-key authentication on write endpoints. Observability and Testcontainers come next. See [Roadmap](#roadmap).
+**Status:** work in progress. Milestones 0–4 are done: data model, scan ingestion, Findings API, NVD enrichment with a circuit breaker, and asynchronous Kafka processing with retries and a dead-letter topic. Milestone 5 is in progress: API-key authentication on write endpoints, correlation IDs, and Prometheus metrics. Read access, Testcontainers and the remaining security work come next. See [Roadmap](#roadmap).
 
 ---
 
@@ -184,8 +184,8 @@ scripts/                          Local development helpers (seed data)
 - [ ] **M5 – Security + observability** (in progress)
   - [x] API key on write endpoints (`X-API-Key`, fail closed, 401 as Problem Details)
   - [ ] Read access and roles (a read key or a second role for risk acceptance)
-  - [ ] Actuator and Micrometer metrics for Kafka consumer lag and the NVD circuit breaker
-  - [ ] Correlation ID in logs and responses
+  - [x] Actuator and Micrometer metrics at `/actuator/prometheus`: Kafka consumer lag, NVD circuit breaker state, scans processed
+  - [x] Correlation ID from request to log lines and Kafka message (`X-Correlation-Id`)
   - [ ] Testcontainers (PostgreSQL and Kafka) to replace the shared local database in tests
 - [ ] **M6 – Ship it:** ~~GitHub Actions build + tests~~ ✅ done · multi-stage Dockerfile · Dependency-Check on this repo
 
