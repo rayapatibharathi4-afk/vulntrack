@@ -6,7 +6,7 @@
 
 VulnTrack is a backend service that ingests dependency vulnerability scan reports from CI pipelines, enriches each CVE with data from the NVD API, tracks every finding against a severity-based SLA, and exposes REST APIs for listing, assigning and closing findings. Scans are processed asynchronously through Kafka, so a slow NVD API or a large report never blocks the CI pipeline.
 
-**Status:** work in progress. Milestones 0–4 are done: data model, scan ingestion, Findings API, NVD enrichment, and asynchronous Kafka processing with retries and a dead-letter topic. Security and observability come next. See [Roadmap](#roadmap).
+**Status:** work in progress. Milestones 0–4 are done: data model, scan ingestion, Findings API, NVD enrichment with a circuit breaker, and asynchronous Kafka processing with retries and a dead-letter topic. Milestone 5 has started: API-key authentication on write endpoints. Observability and Testcontainers come next. See [Roadmap](#roadmap).
 
 ---
 
@@ -52,9 +52,9 @@ One Spring Boot deployable with two logical parts (REST APIs + Kafka consumer). 
 | Framework | Spring Boot 4.1 (Web MVC, Data JPA, Validation, Actuator) |
 | Database | PostgreSQL 16, Flyway migrations |
 | Messaging | Kafka 4.1 (KRaft), Spring for Apache Kafka, dead-letter topic |
-| Resilience / cache | Resilience4j, Caffeine — *planned* |
-| Security | Spring Security, JWT (ADMIN / VIEWER) — *planned* |
-| Tests | JUnit 5, AssertJ, Mockito, MockMvc; Testcontainers — *planned* |
+| Resilience / cache | Resilience4j (retry, circuit breaker), Caffeine |
+| Security | Spring Security, API key on write endpoints (`X-API-Key`) |
+| Tests | JUnit 5, AssertJ, Mockito, MockMvc, `@EmbeddedKafka`; Testcontainers — *planned* |
 | Build | Maven Wrapper, Docker Compose |
 
 ## Getting started
@@ -62,11 +62,13 @@ One Spring Boot deployable with two logical parts (REST APIs + Kafka consumer). 
 **Prerequisites:** JDK 21, Docker Desktop, Git. Maven is not required (the project uses the Maven Wrapper).
 
 ```bash
-# 1. Start PostgreSQL
+# 1. Start PostgreSQL and Kafka (KRaft, no ZooKeeper)
 docker compose up -d
 docker compose ps            # wait for (healthy)
 
 # 2. Run the app (Flyway creates the schema on startup)
+#    Set the API key that write requests must send. Without it, all writes return 401.
+export VULNTRACK_API_KEY=choose-a-long-random-value     # PowerShell: $env:VULNTRACK_API_KEY = "..."
 ./mvnw spring-boot:run       # Windows: .\mvnw spring-boot:run
 
 # 3. Check it is up
@@ -83,8 +85,10 @@ curl http://localhost:8080/actuator/health
 
 ```bash
 curl -X POST http://localhost:8080/api/applications -H "Content-Type: application/json" \
+     -H "X-API-Key: $VULNTRACK_API_KEY" \
      -d '{"name":"payments-service","ownerTeam":"payments"}'
 curl -X POST http://localhost:8080/api/applications -H "Content-Type: application/json" \
+     -H "X-API-Key: $VULNTRACK_API_KEY" \
      -d '{"name":"auth-service","ownerTeam":"identity"}'
 
 docker exec -i vulntrack-postgres psql -U vulntrack -d vulntrack < scripts/dev-seed.sql
@@ -148,7 +152,9 @@ Indexes: `finding(status, sla_due_at)` for the overdue query, `finding(cve_id)` 
 
 ```
 src/main/java/com/bharathi/vulntrack
-├── config/       Clock bean
+├── config/       Clock bean, security (API key filter and rules)
+├── ingest/       Report parser, scan submission, Kafka publisher, consumer, retry and dead-letter handling
+├── nvd/          NVD client with retry and circuit breaker, scheduled CVE enrichment
 ├── domain/       JPA entities and enums
 ├── repository/   Spring Data repositories, Specifications for optional filters
 ├── service/      Business logic (SLA calculator, application + finding services)
@@ -175,7 +181,12 @@ scripts/                          Local development helpers (seed data)
 - [x] **M2 – Scan ingestion:** `POST /api/scans` for OWASP Dependency-Check reports, package-level upserts, auto-FIXED
 - [x] **M3 – NVD enrichment:** NVD API client with timeout, retry, circuit breaker, fallback and cache
 - [x] **M4 – Async processing:** Kafka, `202 Accepted`, scan status endpoint, retries, dead-letter topic, tests
-- [ ] **M5 – Security + observability:** JWT roles, correlation IDs, Prometheus metrics, Testcontainers
+- [ ] **M5 – Security + observability** (in progress)
+  - [x] API key on write endpoints (`X-API-Key`, fail closed, 401 as Problem Details)
+  - [ ] Read access and roles (a read key or a second role for risk acceptance)
+  - [ ] Actuator and Micrometer metrics for Kafka consumer lag and the NVD circuit breaker
+  - [ ] Correlation ID in logs and responses
+  - [ ] Testcontainers (PostgreSQL and Kafka) to replace the shared local database in tests
 - [ ] **M6 – Ship it:** ~~GitHub Actions build + tests~~ ✅ done · multi-stage Dockerfile · Dependency-Check on this repo
 
 ## Author
