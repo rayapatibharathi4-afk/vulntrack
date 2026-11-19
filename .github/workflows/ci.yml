@@ -49,8 +49,17 @@ jobs:
           java-version: '21'
           cache: maven
 
+      - name: Check that the NVD key is set
+        # Dependency-Check 13 refuses to start without an NVD API key, so say so clearly instead of failing in the scanner
+        env:
+          NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
+        run: |
+          if [ -z "$NVD_API_KEY" ]; then
+            echo "::error::The NVD_API_KEY repository secret is not set. Add it under Settings > Secrets and variables > Actions."
+            exit 1
+          fi
+
       - name: OWASP Dependency-Check (fails on CVSS 7.0 or higher)
-        # The key is a repository secret. Without it the scan still runs, but the NVD download is much slower.
         env:
           NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
         run: ./mvnw -B -Psecurity-scan org.owasp:dependency-check-maven:check

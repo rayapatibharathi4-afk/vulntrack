@@ -40,6 +40,20 @@
 **Known gaps (for later steps)**
 - Duplicate-delivery test not written yet — Step 4.
 
+## Milestone 6 — Step 4: first CI run of the dependency scan failed (missing NVD key)
+
+**Symptom:** GitHub Actions run for `7238bfb` (the cleanup commit): `build` passed, `dependency-check` failed at the OWASP step
+after 16 seconds. A full NVD download takes far longer, so this was not a vulnerability finding.
+
+**Root cause:** the scanner (dependency-check 13.0.0) refuses to start without an NVD API key:
+`Invalid API Key, length of 0 too short`. The `NVD_API_KEY` repository secret is not set. Reproduced locally with the
+same command and an empty key.
+
+**Fix:** a guard step fails the job first, with the message to add the secret. The secret itself has to be added in
+GitHub (Settings → Secrets and variables → Actions); it is not in the repository.
+
+**Not an issue:** a PKIX warning from an unrelated Maven repository (`jvnet-nexus-releases`) in the same output.
+
 ## Milestone 5 — Step 8: metrics need the read role
 
 **What changed:** `/actuator/prometheus` and `/actuator/metrics/**` require `ROLE_VIEWER`. The risk key (which has only
